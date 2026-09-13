@@ -1,26 +1,25 @@
 # Kuri-App
 
-Community Kuri management application.
+A modern web application for managing community Kuris/Chitties.
 
-## Stack
+## Development
 
-- Next.js
-- React
-- TypeScript
-- Tailwind CSS
-- Supabase (PostgreSQL, Auth, Storage, RLS)
-- Zod
-- Vitest
-- Playwright
+Requirements:
+- Node.js 20+
+- A Supabase project
 
-## Local development
+Install dependencies:
 
-1. Install Node.js.
-2. Run `npm install`.
-3. Copy `.env.example` to `.env.local`.
-4. Add the Supabase project URL and public anon key.
-5. Run `npm run dev`.
+```bash
+npm install
+```
 
-## Architecture
+Copy `.env.example` to `.env.local` and add the Supabase project URL and publishable key.
 
-See `docs/TECHNICAL_BLUEPRINT.md` for the product and technical architecture. The application is being built incrementally, starting with the project foundation and database/auth infrastructure before the Kuri workflows.
+Run the app:
+
+```bash
+npm run dev
+```
+
+Open http://localhost:3000.
