@@ -17,28 +17,23 @@ export async function createKuri(formData: FormData) {
 
   if (!user) redirect("/login");
 
-  const { data: organizationId, error: organizationError } = await supabase.rpc(
-    "get_my_workspace_id",
+  const { data: contextRows, error: contextError } = await supabase.rpc(
+    "current_user_membership",
   );
 
-  if (organizationError) {
-    console.error("createKuri workspace lookup failed:", organizationError);
+  if (contextError) {
+    console.error("createKuri workspace context lookup failed:", contextError);
     redirect(
       "/dashboard?error=Unable%20to%20verify%20workspace%20membership.",
     );
   }
 
+  const membership = contextRows?.[0];
+  const organizationId = membership?.organization_id;
+  const role = membership?.role;
+
   if (!organizationId) {
     redirect("/workspace?error=No%20workspace%20was%20found.");
-  }
-
-  const { data: role, error: roleError } = await supabase.rpc(
-    "get_my_workspace_role",
-  );
-
-  if (roleError) {
-    console.error("createKuri role lookup failed:", roleError);
-    redirect("/dashboard?error=Unable%20to%20verify%20workspace%20role.");
   }
 
   if (role !== "MAIN_ADMIN" && role !== "ADMIN") {
