@@ -29,10 +29,7 @@ export default async function PeoplePage({
     );
   }
 
-  const { data: people, error } = await supabase
-    .from("people")
-    .select("id, registered_name, display_name, address, created_at")
-    .order("created_at", { ascending: false });
+  const { data: people, error } = await supabase.rpc("list_people_for_admin");
 
   if (error) {
     console.error("People lookup failed:", error);
@@ -68,7 +65,7 @@ export default async function PeoplePage({
             <div className="grid grid-cols-[1fr_1fr_auto] gap-4 border-b border-slate-200 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <div>Registered name</div><div>Display name</div><div></div>
             </div>
-            {people.map((person) => (
+            {people.map((person: { id: string; registered_name: string; display_name: string | null; created_at: string }) => (
               <Link key={person.id} href={`/dashboard/people/${person.id}`} className="grid grid-cols-[1fr_1fr_auto] items-center gap-4 border-b border-slate-100 px-5 py-4 last:border-b-0 hover:bg-slate-50">
                 <div><p className="font-medium">{person.registered_name}</p><p className="mt-1 text-xs text-slate-500">Added {new Date(person.created_at).toLocaleDateString("en-IN")}</p></div>
                 <div className="text-sm text-slate-600">{person.display_name ?? "—"}</div>
