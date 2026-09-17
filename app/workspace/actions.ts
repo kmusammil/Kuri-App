@@ -30,33 +30,26 @@ export async function createWorkspace(formData: FormData) {
     redirect("/dashboard");
   }
 
-  const { data: organization, error } = await supabase
-    .from("organizations")
-    .insert({ name, description: description || null })
-    .select("id")
-    .single();
+  const { data: organizationId, error } = await supabase.rpc("bootstrap_kuri_admin", {
+    target_organization_name: name,
+  });
 
-  if (error || !organization) {
-    console.error("createWorkspace organization insert failed:", error);
+  if (error || !organizationId) {
+    console.error("createWorkspace bootstrap failed:", error);
     redirect(
-      "/workspace?error=Unable%20to%20create%20workspace.%20Check%20database%20permissions."
+      "/workspace?error=Unable%20to%20create%20workspace.%20Please%20check%20the%20database%20setup."
     );
   }
 
-  const { error: membershipError } = await supabase
-    .from("organization_users")
-    .insert({
-      organization_id: organization.id,
-      user_id: user.id,
-      role: "MAIN_ADMIN",
-    });
+  if (description) {
+    const { error: descriptionError } = await supabase
+      .from("organizations")
+      .update({ description })
+      .eq("id", organizationId);
 
-  if (membershipError) {
-    console.error("createWorkspace admin membership insert failed:", membershipError);
-    await supabase.from("organizations").delete().eq("id", organization.id);
-    redirect(
-      "/workspace?error=Workspace%20created%20but%20administrator%20assignment%20failed."
-    );
+    if (descriptionError) {
+      console.error("createWorkspace description update failed:", descriptionError);
+    }
   }
 
   revalidatePath("/", "layout");
