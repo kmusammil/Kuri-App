@@ -1,8 +1,6 @@
 begin;
 
--- Admin-only RPC for the global people registry. The SECURITY DEFINER function
--- performs the authorization check internally and returns people directly,
--- avoiding client-side RLS traversal through application tables.
+-- Admin-only RPC for the global people registry.
 create or replace function public.list_people_for_admin()
 returns table (
   id uuid,
@@ -30,9 +28,9 @@ $$;
 revoke all on function public.list_people_for_admin() from public;
 grant execute on function public.list_people_for_admin() to authenticated;
 
--- Admin RPCs perform their own authorization, so direct authenticated reads of
--- the global people registry are not needed.
+-- The global people registry is deliberately accessed through the admin RPC.
 drop policy if exists people_select on public.people;
+revoke all on table public.people from authenticated;
 
 grant select on table public.people to authenticated;
 
