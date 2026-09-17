@@ -26,23 +26,22 @@ export default async function KuriDetailPage({
   const membership = contextRows?.[0];
   if (!membership?.organization_id) redirect("/workspace");
   if (membership.role !== "MAIN_ADMIN" && membership.role !== "ADMIN") {
-    redirect("/dashboard?error=You%20do%20not%20have%20permission%20to%20view%20this%20Kuri.");
+    redirect(
+      "/dashboard?error=You%20do%20not%20have%20permission%20to%20view%20this%20Kuri.",
+    );
   }
 
-  const { data: kuri, error: kuriError } = await supabase
-    .from("kuris")
-    .select(
-      "id, name, description, start_date, number_of_cycles, membership_limit, installment_amount, frequency, due_day, draw_day, gross_prize_amount, muppu_amount, winner_rule, exit_refund_rule, status",
-    )
-    .eq("id", id)
-    .eq("organization_id", membership.organization_id)
-    .maybeSingle();
+  const { data: rows, error: kuriError } = await supabase.rpc(
+    "get_kuri_for_admin",
+    { target_kuri_id: id },
+  );
 
   if (kuriError) {
-    console.error("Kuri detail lookup failed:", kuriError);
+    console.error("Kuri detail RPC failed:", kuriError);
     redirect("/dashboard?error=Unable%20to%20load%20the%20Kuri.");
   }
 
+  const kuri = rows?.[0];
   if (!kuri) notFound();
 
   return (
