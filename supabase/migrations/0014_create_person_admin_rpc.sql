@@ -1,6 +1,8 @@
 begin;
 
--- Recreate the People admin create RPC under a new migration version.
+-- Recreate the People admin create RPC under migration 0014. Remote history
+-- already contains 0013 from the earlier detail-RPC attempt, so this migration
+-- owns only person creation.
 create or replace function public.create_person_for_admin(
   registered_name text,
   display_name text default null,
