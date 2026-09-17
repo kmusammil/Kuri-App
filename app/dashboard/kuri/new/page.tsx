@@ -15,20 +15,20 @@ export default async function NewKuriPage({
 
   if (!user) redirect("/login");
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("organization_users")
-    .select("organization_id, role")
-    .eq("user_id", user.id)
-    .limit(1)
-    .maybeSingle();
+  const { data: contextRows, error: contextError } = await supabase.rpc(
+    "current_user_membership",
+  );
 
-  if (membershipError) {
-    redirect(`/dashboard?error=${encodeURIComponent("Unable to verify workspace membership.")}`);
+  if (contextError) {
+    redirect(
+      `/dashboard?error=${encodeURIComponent(
+        "Unable to verify workspace membership.",
+      )}`,
+    );
   }
 
-  if (!membership?.organization_id) {
-    redirect("/workspace");
-  }
+  const membership = contextRows?.[0];
+  if (!membership?.organization_id) redirect("/workspace");
 
   const params = await searchParams;
   const role = membership.role;
