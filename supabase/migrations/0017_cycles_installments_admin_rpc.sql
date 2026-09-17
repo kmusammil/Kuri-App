@@ -49,8 +49,8 @@ begin
   for i in 1..kuri_row.number_of_cycles loop
     cycle_start := (kuri_row.start_date + ((i - 1) * interval '1 month'))::date;
     cycle_end := (cycle_start + interval '1 month' - interval '1 day')::date;
-    due_date := make_date(extract(year from cycle_start)::integer, extract(month from cycle_start)::integer, least(kuri_row.due_day, extract(day from (cycle_end))::integer));
-    draw_date := make_date(extract(year from cycle_start)::integer, extract(month from cycle_start)::integer, least(kuri_row.draw_day, extract(day from (cycle_end))::integer));
+    due_date := make_date(extract(year from cycle_start)::integer, extract(month from cycle_start)::integer, least(kuri_row.due_day, extract(day from cycle_end)::integer));
+    draw_date := make_date(extract(year from cycle_start)::integer, extract(month from cycle_start)::integer, least(kuri_row.draw_day, extract(day from cycle_end)::integer));
 
     insert into public.cycles (
       kuri_id, cycle_number, period_start, period_end, due_date, draw_date, status
@@ -89,7 +89,12 @@ begin
 end;
 $$;
 
-create or replace function public.list_cycles_for_admin(target_kuri_id uuid)
+-- Remote history already contains list_cycles_for_admin with a different
+-- return shape. PostgreSQL cannot replace a function when its OUT row type
+-- changes, so remove that old definition before recreating the intended one.
+drop function if exists public.list_cycles_for_admin(uuid);
+
+create function public.list_cycles_for_admin(target_kuri_id uuid)
 returns table (
   id uuid,
   cycle_number integer,
