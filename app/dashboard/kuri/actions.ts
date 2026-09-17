@@ -17,16 +17,14 @@ export async function createKuri(formData: FormData) {
 
   if (!user) redirect("/login");
 
-  // Resolve the workspace through the security-definer helper instead of
-  // relying on the client-readable organization_users policy chain.
   const { data: organizationId, error: organizationError } = await supabase.rpc(
-    "get_my_workspace_id"
+    "get_my_workspace_id",
   );
 
   if (organizationError) {
     console.error("createKuri workspace lookup failed:", organizationError);
     redirect(
-      "/dashboard?error=Unable%20to%20verify%20workspace%20membership."
+      "/dashboard?error=Unable%20to%20verify%20workspace%20membership.",
     );
   }
 
@@ -34,20 +32,19 @@ export async function createKuri(formData: FormData) {
     redirect("/workspace?error=No%20workspace%20was%20found.");
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("organization_users")
-    .select("organization_id, role")
-    .eq("organization_id", organizationId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const { data: role, error: roleError } = await supabase.rpc(
+    "get_my_workspace_role",
+  );
 
-  if (membershipError) {
-    console.error("createKuri role lookup failed:", membershipError);
+  if (roleError) {
+    console.error("createKuri role lookup failed:", roleError);
     redirect("/dashboard?error=Unable%20to%20verify%20workspace%20role.");
   }
 
-  if (!membership || !["MAIN_ADMIN", "ADMIN"].includes(membership.role)) {
-    redirect("/dashboard?error=You%20do%20not%20have%20permission%20to%20create%20a%20Kuri.");
+  if (role !== "MAIN_ADMIN" && role !== "ADMIN") {
+    redirect(
+      "/dashboard?error=You%20do%20not%20have%20permission%20to%20create%20a%20Kuri.",
+    );
   }
 
   const name = String(formData.get("name") ?? "").trim();
@@ -60,8 +57,12 @@ export async function createKuri(formData: FormData) {
   const drawDay = toInteger(formData.get("draw_day"));
   const grossPrizeAmount = toInteger(formData.get("gross_prize_amount"));
   const muppuAmount = toInteger(formData.get("muppu_amount"));
-  const winnerRule = String(formData.get("winner_rule") ?? "ALL_PERSON_MEMBERSHIPS");
-  const exitRefundRule = String(formData.get("exit_refund_rule") ?? "AT_MATURITY");
+  const winnerRule = String(
+    formData.get("winner_rule") ?? "ALL_PERSON_MEMBERSHIPS",
+  );
+  const exitRefundRule = String(
+    formData.get("exit_refund_rule") ?? "AT_MATURITY",
+  );
 
   if (
     !name ||
@@ -83,7 +84,9 @@ export async function createKuri(formData: FormData) {
     !Number.isInteger(muppuAmount) ||
     muppuAmount < 0
   ) {
-    redirect("/dashboard/kuri/new?error=Please%20enter%20valid%20Kuri%20details.");
+    redirect(
+      "/dashboard/kuri/new?error=Please%20enter%20valid%20Kuri%20details.",
+    );
   }
 
   const { data: kuri, error } = await supabase
