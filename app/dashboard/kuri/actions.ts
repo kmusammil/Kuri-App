@@ -17,31 +17,6 @@ export async function createKuri(formData: FormData) {
 
   if (!user) redirect("/login");
 
-  const { data: contextRows, error: contextError } = await supabase.rpc(
-    "current_user_membership",
-  );
-
-  if (contextError) {
-    console.error("createKuri workspace context lookup failed:", contextError);
-    redirect(
-      "/dashboard?error=Unable%20to%20verify%20workspace%20membership.",
-    );
-  }
-
-  const membership = contextRows?.[0];
-  const organizationId = membership?.organization_id;
-  const role = membership?.role;
-
-  if (!organizationId) {
-    redirect("/workspace?error=No%20workspace%20was%20found.");
-  }
-
-  if (role !== "MAIN_ADMIN" && role !== "ADMIN") {
-    redirect(
-      "/dashboard?error=You%20do%20not%20have%20permission%20to%20create%20a%20Kuri.",
-    );
-  }
-
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const startDate = String(formData.get("start_date") ?? "").trim();
@@ -84,36 +59,31 @@ export async function createKuri(formData: FormData) {
     );
   }
 
-  const { data: kuri, error } = await supabase
-    .from("kuris")
-    .insert({
-      organization_id: organizationId,
-      name,
-      description: description || null,
-      start_date: startDate,
-      number_of_cycles: numberOfCycles,
-      membership_limit: membershipLimit,
-      installment_amount: installmentAmount,
-      frequency: "MONTHLY",
-      due_day: dueDay,
-      draw_day: drawDay,
-      gross_prize_amount: grossPrizeAmount,
-      muppu_amount: muppuAmount,
-      winner_rule: winnerRule,
-      exit_refund_rule: exitRefundRule,
-    })
-    .select("id")
-    .single();
+  const { data: kuriId, error } = await supabase.rpc("create_kuri_for_admin", {
+    name,
+    description: description || null,
+    start_date: startDate,
+    number_of_cycles: numberOfCycles,
+    membership_limit: membershipLimit,
+    installment_amount: installmentAmount,
+    due_day: dueDay,
+    draw_day: drawDay,
+    gross_prize_amount: grossPrizeAmount,
+    muppu_amount: muppuAmount,
+    winner_rule: winnerRule,
+    exit_refund_rule: exitRefundRule,
+  });
 
-  if (error || !kuri) {
-    console.error("createKuri insert failed:", error);
-    const reason = error?.message || "No Kuri row was returned after insert.";
+  if (error || !kuriId) {
+    console.error("createKuri RPC failed:", error);
     redirect(
-      `/dashboard/kuri/new?error=${encodeURIComponent(`Unable to create Kuri: ${reason}`)}`,
+      `/dashboard/kuri/new?error=${encodeURIComponent(
+        `Unable to create Kuri: ${error?.message ?? "Unknown error"}`,
+      )}`,
     );
   }
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/kuri");
-  redirect(`/dashboard/kuri/${kuri.id}`);
+  redirect(`/dashboard/kuri/${kuriId}`);
 }
