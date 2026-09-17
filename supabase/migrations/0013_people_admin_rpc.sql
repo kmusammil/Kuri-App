@@ -1,7 +1,9 @@
 begin;
 
--- Centralize workspace-admin checks in a SECURITY DEFINER helper so
--- people RLS does not recurse through tables that authenticated may not read.
+-- The earlier admin helper still executed a direct query against
+-- organization_users. PostgreSQL evaluates function table access privileges
+-- separately from the caller's RLS, so use the existing security-definer
+-- workspace membership helper instead.
 create or replace function public.current_user_is_admin()
 returns boolean
 language sql
@@ -17,6 +19,8 @@ as $$
   );
 $$;
 
+-- A security-definer function owned by the migration owner can read the
+-- membership table without requiring authenticated table privileges.
 revoke all on function public.current_user_is_admin() from public;
 grant execute on function public.current_user_is_admin() to authenticated;
 
