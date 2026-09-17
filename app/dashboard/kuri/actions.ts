@@ -17,21 +17,37 @@ export async function createKuri(formData: FormData) {
 
   if (!user) redirect("/login");
 
+  // Resolve the workspace through the security-definer helper instead of
+  // relying on the client-readable organization_users policy chain.
+  const { data: organizationId, error: organizationError } = await supabase.rpc(
+    "get_my_workspace_id"
+  );
+
+  if (organizationError) {
+    console.error("createKuri workspace lookup failed:", organizationError);
+    redirect(
+      "/dashboard?error=Unable%20to%20verify%20workspace%20membership."
+    );
+  }
+
+  if (!organizationId) {
+    redirect("/workspace?error=No%20workspace%20was%20found.");
+  }
+
   const { data: membership, error: membershipError } = await supabase
     .from("organization_users")
     .select("organization_id, role")
+    .eq("organization_id", organizationId)
     .eq("user_id", user.id)
-    .in("role", ["MAIN_ADMIN", "ADMIN"])
-    .limit(1)
     .maybeSingle();
 
   if (membershipError) {
-    console.error("createKuri admin membership lookup failed:", membershipError);
-    redirect("/workspace?error=Unable%20to%20verify%20workspace%20permissions.");
+    console.error("createKuri role lookup failed:", membershipError);
+    redirect("/dashboard?error=Unable%20to%20verify%20workspace%20role.");
   }
 
-  if (!membership?.organization_id) {
-    redirect("/workspace?error=No%20admin%20workspace%20was%20found.");
+  if (!membership || !["MAIN_ADMIN", "ADMIN"].includes(membership.role)) {
+    redirect("/dashboard?error=You%20do%20not%20have%20permission%20to%20create%20a%20Kuri.");
   }
 
   const name = String(formData.get("name") ?? "").trim();
@@ -73,7 +89,7 @@ export async function createKuri(formData: FormData) {
   const { data: kuri, error } = await supabase
     .from("kuris")
     .insert({
-      organization_id: membership.organization_id,
+      organization_id: organizationId,
       name,
       description: description || null,
       start_date: startDate,
