@@ -20,21 +20,20 @@ export default async function PersonDetailPage({
     redirect("/dashboard?error=You%20do%20not%20have%20permission%20to%20view%20people.");
   }
 
-  const { data: person, error: personError } = await supabase
-    .from("people")
-    .select("id, registered_name, display_name, address, notes, created_at")
-    .eq("id", id)
-    .maybeSingle();
+  const { data: rows, error: personError } = await supabase.rpc("get_person_for_admin", {
+    target_person_id: id,
+  });
+
   if (personError) {
     console.error("Person lookup failed:", personError);
     redirect("/dashboard/people?error=Unable%20to%20load%20person.");
   }
+
+  const person = rows?.[0];
   if (!person) notFound();
 
-  const [{ data: phones }, { data: emails }] = await Promise.all([
-    supabase.from("person_phones").select("id, phone_number, label, is_primary").eq("person_id", id).order("is_primary", { ascending: false }),
-    supabase.from("person_emails").select("id, email, label, is_primary").eq("person_id", id).order("is_primary", { ascending: false }),
-  ]);
+  const phones = Array.isArray(person.phones) ? person.phones : [];
+  const emails = Array.isArray(person.emails) ? person.emails : [];
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
@@ -52,8 +51,8 @@ export default async function PersonDetailPage({
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold">Contact</h2>
             <div className="mt-4 space-y-3 text-sm">
-              <div><p className="text-slate-500">Phone</p><p className="mt-1 font-medium">{phones?.map((phone) => phone.phone_number).join(", ") || "—"}</p></div>
-              <div><p className="text-slate-500">Email</p><p className="mt-1 break-all font-medium">{emails?.map((email) => email.email).join(", ") || "—"}</p></div>
+              <div><p className="text-slate-500">Phone</p><p className="mt-1 font-medium">{phones.map((phone: { phone_number: string }) => phone.phone_number).join(", ") || "—"}</p></div>
+              <div><p className="text-slate-500">Email</p><p className="mt-1 break-all font-medium">{emails.map((email: { email: string }) => email.email).join(", ") || "—"}</p></div>
               <div><p className="text-slate-500">Address</p><p className="mt-1 whitespace-pre-wrap">{person.address || "—"}</p></div>
             </div>
           </section>
