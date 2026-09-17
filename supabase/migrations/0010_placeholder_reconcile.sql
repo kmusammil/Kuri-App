@@ -1,0 +1,3 @@
+-- Placeholder migration retained so Supabase migration history remains continuous.
+-- No schema changes are required here; the superseded People-access work was
+-- removed from source and the active People path uses RPCs instead.
