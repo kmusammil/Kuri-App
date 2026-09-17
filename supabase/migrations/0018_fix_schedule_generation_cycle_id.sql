@@ -1,0 +1,106 @@
+begin;
+
+-- Fix PL/pgSQL variable/column ambiguity in the schedule generator.
+-- The previous function used the same name (cycle_id) for a local variable
+-- and the installments table column, which made the correlated NOT EXISTS
+-- expression ambiguous at runtime.
+create or replace function public.generate_kuri_schedule_for_admin(target_kuri_id uuid)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  kuri_row public.kuris%rowtype;
+  current_cycle_id uuid;
+  membership_count integer;
+  created_cycles integer := 0;
+  cycle_start date;
+  cycle_end date;
+  due_date date;
+  draw_date date;
+begin
+  if auth.uid() is null then
+    raise exception 'You must be signed in.';
+  end if;
+
+  select k.* into kuri_row
+  from public.kuris k
+  where k.id = target_kuri_id
+    and exists (
+      select 1
+      from public.organization_users ou
+      where ou.user_id = auth.uid()
+        and ou.organization_id = k.organization_id
+        and ou.role = any(array['MAIN_ADMIN','ADMIN']::public.app_role[])
+    );
+
+  if not found then
+    raise exception 'You do not have permission to manage this Kuri.';
+  end if;
+
+  select count(*) into membership_count
+  from public.memberships m
+  where m.kuri_id = target_kuri_id;
+
+  if membership_count = 0 then
+    raise exception 'Add at least one membership before generating the schedule.';
+  end if;
+
+  for i in 1..kuri_row.number_of_cycles loop
+    cycle_start := (kuri_row.start_date + ((i - 1) * interval '1 month'))::date;
+    cycle_end := (cycle_start + interval '1 month' - interval '1 day')::date;
+    due_date := make_date(
+      extract(year from cycle_start)::integer,
+      extract(month from cycle_start)::integer,
+      least(kuri_row.due_day, extract(day from cycle_end)::integer)
+    );
+    draw_date := make_date(
+      extract(year from cycle_start)::integer,
+      extract(month from cycle_start)::integer,
+      least(kuri_row.draw_day, extract(day from cycle_end)::integer)
+    );
+
+    current_cycle_id := null;
+
+    insert into public.cycles (
+      kuri_id, cycle_number, period_start, period_end, due_date, draw_date, status
+    )
+    values (
+      target_kuri_id, i, cycle_start, cycle_end, due_date, draw_date, 'UPCOMING'
+    )
+    on conflict (kuri_id, cycle_number) do nothing
+    returning id into current_cycle_id;
+
+    if current_cycle_id is null then
+      select c.id into current_cycle_id
+      from public.cycles c
+      where c.kuri_id = target_kuri_id
+        and c.cycle_number = i;
+    else
+      created_cycles := created_cycles + 1;
+    end if;
+
+    insert into public.installments (
+      membership_id, cycle_id, amount_due, amount_paid, status, due_date
+    )
+    select
+      m.id,
+      current_cycle_id,
+      kuri_row.installment_amount,
+      0,
+      'UNPAID',
+      due_date
+    from public.memberships m
+    where m.kuri_id = target_kuri_id
+    on conflict (membership_id, cycle_id) do nothing;
+  end loop;
+
+  return created_cycles;
+end;
+$$;
+
+revoke all on function public.generate_kuri_schedule_for_admin(uuid) from public;
+grant execute on function public.generate_kuri_schedule_for_admin(uuid) to authenticated;
+
+commit;
