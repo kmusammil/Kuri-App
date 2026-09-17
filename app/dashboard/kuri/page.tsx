@@ -31,15 +31,12 @@ export default async function KuriListPage() {
     );
   }
 
-  const { data: kuris, error: kurisError } = await supabase
-    .from("kuris")
-    .select(
-      "id, name, description, start_date, number_of_cycles, membership_limit, installment_amount, gross_prize_amount, status",
-    )
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: false });
+  const { data: kuris, error: kurisError } = await supabase.rpc(
+    "list_kuris_for_admin",
+  );
 
   if (kurisError) {
+    console.error("Kuri list RPC failed:", kurisError);
     redirect(
       `/dashboard?error=${encodeURIComponent(
         `Unable to load Kuris: ${kurisError.message}`,
