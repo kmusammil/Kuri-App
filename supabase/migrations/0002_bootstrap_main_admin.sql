@@ -1,5 +1,4 @@
--- Bootstrap the first Kuri-App organization and MAIN_ADMIN role.
--- Run this once after creating the first Supabase Auth user.
+-- Bootstrap the first Kuri-App workspace and MAIN_ADMIN role.
 -- The authenticated user's UUID is taken from auth.uid(), so no user ID is stored in Git.
 
 begin;
@@ -15,7 +14,7 @@ declare
   organization_id uuid;
 begin
   if current_user_id is null then
-    raise exception 'You must be signed in to bootstrap the Kuri-App organization.';
+    raise exception 'You must be signed in to bootstrap the Kuri-App workspace.';
   end if;
 
   if not exists (select 1 from public.users where id = current_user_id) then
