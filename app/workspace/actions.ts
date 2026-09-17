@@ -37,7 +37,10 @@ export async function createWorkspace(formData: FormData) {
     .single();
 
   if (error || !organization) {
-    redirect("/workspace?error=Unable%20to%20create%20workspace.");
+    console.error("createWorkspace organization insert failed:", error);
+    redirect(
+      "/workspace?error=Unable%20to%20create%20workspace.%20Check%20database%20permissions."
+    );
   }
 
   const { error: membershipError } = await supabase
@@ -49,8 +52,11 @@ export async function createWorkspace(formData: FormData) {
     });
 
   if (membershipError) {
+    console.error("createWorkspace admin membership insert failed:", membershipError);
     await supabase.from("organizations").delete().eq("id", organization.id);
-    redirect("/workspace?error=Unable%20to%20assign%20administrator%20role.");
+    redirect(
+      "/workspace?error=Workspace%20created%20but%20administrator%20assignment%20failed."
+    );
   }
 
   revalidatePath("/", "layout");
