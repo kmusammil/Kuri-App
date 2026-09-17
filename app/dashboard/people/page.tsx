@@ -2,18 +2,31 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
-export default async function PeoplePage() {
+export default async function PeoplePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: contextRows, error: contextError } = await supabase.rpc("current_user_membership");
-  if (contextError) redirect("/dashboard?error=Unable%20to%20verify%20workspace%20membership.");
+  const { data: contextRows, error: contextError } = await supabase.rpc(
+    "current_user_membership",
+  );
+  if (contextError) {
+    console.error("People workspace lookup failed:", contextError);
+    redirect("/dashboard?error=Unable%20to%20verify%20workspace%20membership.");
+  }
 
   const membership = contextRows?.[0];
   if (!membership?.organization_id) redirect("/workspace");
   if (membership.role !== "MAIN_ADMIN" && membership.role !== "ADMIN") {
-    redirect("/dashboard?error=You%20do%20not%20have%20permission%20to%20view%20people.");
+    redirect(
+      "/dashboard?error=You%20do%20not%20have%20permission%20to%20view%20people.",
+    );
   }
 
   const { data: people, error } = await supabase
@@ -23,8 +36,11 @@ export default async function PeoplePage() {
 
   if (error) {
     console.error("People lookup failed:", error);
-    redirect("/dashboard?error=Unable%20to%20load%20people.");
+    const message = encodeURIComponent(`Unable to load people: ${error.message}`);
+    redirect(`/dashboard?error=${message}`);
   }
+
+  const params = await searchParams;
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
@@ -40,6 +56,12 @@ export default async function PeoplePage() {
             <Link href="/dashboard/people/new" className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white">Add person</Link>
           </div>
         </div>
+
+        {params.error ? (
+          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {params.error}
+          </div>
+        ) : null}
 
         {people?.length ? (
           <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
