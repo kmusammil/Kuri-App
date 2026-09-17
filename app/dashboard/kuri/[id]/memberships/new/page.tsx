@@ -45,7 +45,8 @@ export default async function NewMembershipPage({
   if (!kuri) redirect("/dashboard/kuri");
 
   const { data: peopleRows, error: peopleError } = await supabase.rpc(
-    "list_people_for_admin",
+    "list_people_available_for_membership",
+    { target_kuri_id: id },
   );
   if (peopleError) {
     redirect("/dashboard/people?error=Unable%20to%20load%20people.");
