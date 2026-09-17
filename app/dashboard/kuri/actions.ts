@@ -17,13 +17,18 @@ export async function createKuri(formData: FormData) {
 
   if (!user) redirect("/login");
 
-  const { data: membership } = await supabase
+  const { data: membership, error: membershipError } = await supabase
     .from("organization_users")
     .select("organization_id, role")
     .eq("user_id", user.id)
     .in("role", ["MAIN_ADMIN", "ADMIN"])
     .limit(1)
     .maybeSingle();
+
+  if (membershipError) {
+    console.error("createKuri admin membership lookup failed:", membershipError);
+    redirect("/workspace?error=Unable%20to%20verify%20workspace%20permissions.");
+  }
 
   if (!membership?.organization_id) {
     redirect("/workspace?error=No%20admin%20workspace%20was%20found.");
@@ -87,7 +92,7 @@ export async function createKuri(formData: FormData) {
     .single();
 
   if (error || !kuri) {
-    console.error("createKuri failed:", error);
+    console.error("createKuri insert failed:", error);
     redirect("/dashboard/kuri/new?error=Unable%20to%20create%20Kuri.");
   }
 
