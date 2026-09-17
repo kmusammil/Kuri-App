@@ -7,6 +7,7 @@ grant select, insert, update, delete on table public.person_emails to authentica
 grant select on table public.organization_users to authenticated;
 
 -- Workspace admins may manage people records.
+drop policy if exists people_admin_select on public.people;
 create policy people_admin_select on public.people
 for select
 using (
@@ -18,6 +19,7 @@ using (
   )
 );
 
+drop policy if exists people_admin_insert on public.people;
 create policy people_admin_insert on public.people
 for insert
 with check (
@@ -29,6 +31,7 @@ with check (
   )
 );
 
+drop policy if exists people_admin_update on public.people;
 create policy people_admin_update on public.people
 for update
 using (
@@ -48,6 +51,7 @@ with check (
   )
 );
 
+drop policy if exists people_admin_delete on public.people;
 create policy people_admin_delete on public.people
 for delete
 using (
@@ -60,6 +64,7 @@ using (
 );
 
 -- Contact details are owned by their person record; admins can manage them.
+drop policy if exists person_phones_admin_all on public.person_phones;
 create policy person_phones_admin_all on public.person_phones
 for all
 using (
@@ -79,6 +84,7 @@ with check (
   )
 );
 
+drop policy if exists person_emails_admin_all on public.person_emails;
 create policy person_emails_admin_all on public.person_emails
 for all
 using (
