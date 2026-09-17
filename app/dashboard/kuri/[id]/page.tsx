@@ -44,6 +44,13 @@ export default async function KuriDetailPage({
   const kuri = rows?.[0];
   if (!kuri) notFound();
 
+  const { data: memberships, error: membershipsError } = await supabase.rpc(
+    "list_memberships_for_admin",
+    { target_kuri_id: id },
+  );
+
+  const membershipLoadError = membershipsError?.message ?? null;
+
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
       <div className="mx-auto max-w-6xl">
@@ -131,10 +138,56 @@ export default async function KuriDetailPage({
         </section>
 
         <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold">Next</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            The next layers will create memberships, generate cycles and installments, record payments, and run monthly draws.
-          </p>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold">Memberships</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Add people to this Kuri and assign membership numbers.
+              </p>
+            </div>
+            <Link
+              href={`/dashboard/kuri/${id}/memberships/new`}
+              className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white"
+            >
+              Add membership
+            </Link>
+          </div>
+
+          {membershipLoadError ? (
+            <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              Unable to load memberships: {membershipLoadError}
+            </div>
+          ) : memberships?.length ? (
+            <div className="mt-5 overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500">
+                    <th className="px-3 py-3 font-medium">No.</th>
+                    <th className="px-3 py-3 font-medium">Person</th>
+                    <th className="px-3 py-3 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {memberships.map((item) => (
+                    <tr key={item.id} className="border-b border-slate-100 last:border-0">
+                      <td className="px-3 py-3 font-medium">{item.membership_number}</td>
+                      <td className="px-3 py-3">
+                        {item.display_name || item.registered_name}
+                        {item.display_name ? (
+                          <span className="ml-2 text-slate-400">({item.registered_name})</span>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-3">{item.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="mt-5 rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-600">
+              No memberships yet.
+            </div>
+          )}
         </section>
       </div>
     </main>
