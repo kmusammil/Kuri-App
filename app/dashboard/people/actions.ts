@@ -36,19 +36,20 @@ export async function createPerson(formData: FormData) {
     redirect("/dashboard/people/new?error=Registered%20name%20is%20required.");
   }
 
-  const { data: person, error: personError } = await supabase
-    .from("people")
-    .insert({
+  const { data: personId, error: personError } = await supabase.rpc(
+    "create_person_for_admin",
+    {
       registered_name: registeredName,
       display_name: displayName || null,
       address: address || null,
       notes: notes || null,
-    })
-    .select("id")
-    .single();
+      phone: phone || null,
+      email: email || null,
+    },
+  );
 
-  if (personError || !person) {
-    console.error("createPerson insert failed:", personError);
+  if (personError || !personId) {
+    console.error("createPerson RPC failed:", personError);
     redirect(
       `/dashboard/people/new?error=${encodeURIComponent(
         `Unable to create person: ${personError?.message ?? "Unknown error"}`,
@@ -56,29 +57,7 @@ export async function createPerson(formData: FormData) {
     );
   }
 
-  if (phone) {
-    const { error } = await supabase.from("person_phones").insert({
-      person_id: person.id,
-      phone_number: phone,
-      is_primary: true,
-    });
-    if (error) {
-      console.error("createPerson phone insert failed:", error);
-    }
-  }
-
-  if (email) {
-    const { error } = await supabase.from("person_emails").insert({
-      person_id: person.id,
-      email,
-      is_primary: true,
-    });
-    if (error) {
-      console.error("createPerson email insert failed:", error);
-    }
-  }
-
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/people");
-  redirect(`/dashboard/people/${person.id}`);
+  redirect(`/dashboard/people/${personId}`);
 }
