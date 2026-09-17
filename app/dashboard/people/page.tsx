@@ -32,7 +32,7 @@ export default async function PeoplePage({
   const { data: people, error } = await supabase.rpc("list_people_for_admin");
 
   if (error) {
-    console.error("People lookup failed:", error);
+    console.error("People admin RPC failed:", error);
     const message = encodeURIComponent(`Unable to load people: ${error.message}`);
     redirect(`/dashboard?error=${message}`);
   }
