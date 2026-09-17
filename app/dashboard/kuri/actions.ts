@@ -107,7 +107,10 @@ export async function createKuri(formData: FormData) {
 
   if (error || !kuri) {
     console.error("createKuri insert failed:", error);
-    redirect("/dashboard/kuri/new?error=Unable%20to%20create%20Kuri.");
+    const reason = error?.message || "No Kuri row was returned after insert.";
+    redirect(
+      `/dashboard/kuri/new?error=${encodeURIComponent(`Unable to create Kuri: ${reason}`)}`,
+    );
   }
 
   revalidatePath("/dashboard");
