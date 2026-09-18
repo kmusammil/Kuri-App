@@ -18,7 +18,7 @@ export default async function DashboardPage() {
         <header className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Kuri-App</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight">Dashboard</h1>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight">Dashboard</h1><p className="mt-3"><a href="/dashboard/payments" className="text-sm font-medium underline">Open Payments</a></p>
             <p className="mt-2 text-sm text-slate-600">Your Kuri administration workspace.</p>
           </div>
           <form action={signOut}>
