@@ -27,7 +27,7 @@ export async function createMembership(formData: FormData) {
     {
       target_kuri_id: kuriId,
       target_person_id: personId,
-      membership_number: membershipNumber,
+      target_membership_number: membershipNumber,
     },
   );
 
