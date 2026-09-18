@@ -14,9 +14,18 @@ export default async function MuppuPage({
   if (!user) redirect("/login");
 
   const { data: records, error } = await supabase.rpc("list_muppu_records_for_admin");
-
   const { data: kuris } = await supabase.rpc("list_kuris_for_admin");
   const { data: people } = await supabase.rpc("list_people_for_admin");
+
+  const cycleResults = await Promise.all(
+    (kuris ?? []).map(async (k) => {
+      const { data } = await supabase.rpc("list_cycles_for_admin", {
+        target_kuri_id: k.id,
+      });
+      return (data ?? []).map((c) => ({ ...c, kuriName: k.name }));
+    }),
+  );
+  const cycles = cycleResults.flat();
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
@@ -41,7 +50,12 @@ export default async function MuppuPage({
               </select>
             </label>
             <label className="text-sm font-medium">Cycle
-              <input name="cycle_id" required placeholder="Cycle UUID" className="mt-2 w-full rounded-lg border px-3 py-2.5" />
+              <select name="cycle_id" required className="mt-2 w-full rounded-lg border px-3 py-2.5">
+                <option value="">Select cycle</option>
+                {cycles.map((c) => (
+                  <option key={c.id} value={c.id}>{c.kuriName} — Cycle {c.cycle_number}</option>
+                ))}
+              </select>
             </label>
             <label className="text-sm font-medium">Person
               <select name="person_id" required className="mt-2 w-full rounded-lg border px-3 py-2.5">
