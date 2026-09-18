@@ -111,6 +111,7 @@ export default async function CycleDetailPage({
                     <th className="px-3 py-3 font-medium">Paid</th>
                     <th className="px-3 py-3 font-medium">Balance</th>
                     <th className="px-3 py-3 font-medium">Status</th>
+                    <th className="px-3 py-3 font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -130,6 +131,7 @@ export default async function CycleDetailPage({
                         <td className="px-3 py-3">₹{amountPaid.toLocaleString("en-IN")}</td>
                         <td className="px-3 py-3">₹{Math.max(amountDue - amountPaid, 0).toLocaleString("en-IN")}</td>
                         <td className="px-3 py-3">{item.status}</td>
+                        <td className="px-3 py-3"><Link className="underline underline-offset-2" href={`/dashboard/payments`}>Payments</Link></td>
                       </tr>
                     );
                   })}
