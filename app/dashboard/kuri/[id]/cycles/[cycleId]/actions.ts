@@ -42,7 +42,7 @@ export async function runRandomDraw(formData: FormData) {
   const selectionCount=Number(formData.get("selection_count")||1);
   if(!cycleId || !Number.isInteger(selectionCount) || selectionCount<1) redirect("/dashboard/kuri/"+cycleId+"/cycles/"+cycleId);
   const {error}=await supabase.rpc("run_random_draw_for_admin",{target_cycle_id:cycleId,selection_count:selectionCount});
-  if(error) redirect("/dashboard/kuri?error="+encodeURIComponent(error.message));
+  if(error) redirect("/dashboard/kuri/"+cycleId+"/cycles/"+cycleId+"?error="+encodeURIComponent(error.message));
   revalidatePath("/dashboard/kuri/"+cycleId);
   redirect("/dashboard/kuri/"+cycleId+"/cycles/"+cycleId);
 }
