@@ -10,9 +10,10 @@ export async function prepareDraw(formData: FormData) {
   const {data:{user}}=await supabase.auth.getUser();
   if(!user) redirect("/login");
   const cycleId=String(formData.get("cycle_id")||"").trim();
-  if(!cycleId) redirect("/dashboard/kuri/"+cycleId+"/cycles/"+cycleId);
+  const kuriId=String(formData.get("kuri_id")||"").trim();
+  if(!cycleId || !kuriId) redirect("/dashboard/kuri");
   const {error}=await supabase.rpc("prepare_draw_for_admin",{target_cycle_id:cycleId});
-  if(error) redirect("/dashboard/kuri/"+cycleId+"/cycles/"+cycleId+"?error="+encodeURIComponent(error.message));
+  if(error) redirect("/dashboard/kuri/"+kuriId+"/cycles/"+cycleId+"?error="+encodeURIComponent(error.message));
   revalidatePath("/dashboard/kuri");
   redirect("/dashboard/kuri/"+cycleId+"/cycles/"+cycleId);
 }
