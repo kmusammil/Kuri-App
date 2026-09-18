@@ -23,7 +23,9 @@ export default async function CycleDetailPage({ params, searchParams }: { params
   const { data: poolRows, error: poolError } = await supabase.rpc("list_draw_pool_for_admin",{target_cycle_id:cycleId});
   const query=await searchParams;
   const session=drawSessionRows?.[0];
-  const { data: selections } = await supabase.rpc("get_draw_selections_for_admin",{target_cycle_id:cycleId});
+  const { data: selections } = session
+    ? await supabase.rpc("get_draw_selections_for_admin",{target_cycle_id:cycleId})
+    : { data: [] };
 
   return <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900"><div className="mx-auto max-w-6xl">
     <div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Kuri-App</p><h1 className="mt-2 text-3xl font-bold">Cycle {cycle.cycle_number}</h1><p className="mt-2 text-sm text-slate-600">{cycle.period_start} → {cycle.period_end}</p></div><Link href={`/dashboard/kuri/${id}`} className="rounded-lg border px-4 py-2.5">Back to Kuri</Link></div>
