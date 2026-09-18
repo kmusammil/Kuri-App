@@ -87,6 +87,41 @@ export default async function CycleDetailPage({
           </div>
         ) : null}
 
+        <section className="mt-6 rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold">Cycle lifecycle</h2>
+              <p className="mt-1 text-sm text-slate-600">Advance the cycle through its controlled payment and draw stages.</p>
+            </div>
+            {cycle.status==="UPCOMING" ? (
+              <form action={transitionCycleStatus}>
+                <input type="hidden" name="kuri_id" value={id} />
+                <input type="hidden" name="cycle_id" value={cycleId} />
+                <input type="hidden" name="target_status" value="OPEN" />
+                <button className="rounded-lg bg-slate-900 px-4 py-2.5 text-white">Open cycle</button>
+              </form>
+            ) : cycle.status==="OPEN" ? (
+              <form action={transitionCycleStatus}>
+                <input type="hidden" name="kuri_id" value={id} />
+                <input type="hidden" name="cycle_id" value={cycleId} />
+                <input type="hidden" name="target_status" value="PAYMENT_CLOSED" />
+                <button className="rounded-lg bg-slate-900 px-4 py-2.5 text-white">Close payments</button>
+              </form>
+            ) : cycle.status==="PAYMENT_CLOSED" ? (
+              <form action={transitionCycleStatus}>
+                <input type="hidden" name="kuri_id" value={id} />
+                <input type="hidden" name="cycle_id" value={cycleId} />
+                <input type="hidden" name="target_status" value="DRAW_PENDING" />
+                <button className="rounded-lg bg-slate-900 px-4 py-2.5 text-white">Mark draw pending</button>
+              </form>
+            ) : cycle.status==="DRAW_PENDING" ? (
+              <span className="text-sm font-medium">Ready for draw</span>
+            ) : (
+              <span className="text-sm font-medium">Lifecycle complete</span>
+            )}
+          </div>
+        </section>
+
         <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {[
             ["Due date", cycle.due_date],
