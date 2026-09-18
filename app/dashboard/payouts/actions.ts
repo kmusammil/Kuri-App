@@ -1,3 +1,47 @@
-"use server"; import { revalidatePath } from "next/cache"; import { redirect } from "next/navigation"; import { createClient } from "@/lib/supabase/server";
-export async function preparePayout(formData:FormData){const s=await createClient();const{data:{user}}=await s.auth.getUser();if(!user)redirect("/login");const winnerId=String(formData.get("winner_id")||"").trim();const{data:payoutId,error}=await s.rpc("prepare_payout_for_admin",{target_winner_id:winnerId});if(error)redirect("/dashboard?error="+encodeURIComponent(error.message));revalidatePath("/dashboard/payouts");redirect("/dashboard/payouts/"+winnerId)}
-export async function markPayoutPaid(formData:FormData){const s=await createClient();const{data:{user}}=await s.auth.getUser();if(!user)redirect("/login");const winnerId=String(formData.get("winner_id")||"").trim();const paymentDate=String(formData.get("payment_date")||"").trim();const method=String(formData.get("method")||"").trim();const{error}=await s.rpc("mark_payout_paid_for_admin",{target_winner_id:winnerId,payout_payment_date:new Date(paymentDate).toISOString(),payout_method:method,payout_reference:String(formData.get("reference")||"").trim()||null,payout_notes:String(formData.get("notes")||"").trim()||null,payout_other_deductions:Number(formData.get("other_deductions")||0)});if(error)redirect("/dashboard/payouts/"+winnerId+"?error="+encodeURIComponent(error.message));revalidatePath("/dashboard/payouts");redirect("/dashboard/payouts/"+winnerId)}
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+
+function payoutPath(winnerId: string) { return "/dashboard/payouts/" + winnerId; }
+
+async function getClient() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  return supabase;
+}
+
+export async function preparePayout(formData: FormData) {
+  const supabase = await getClient();
+  const winnerId = String(formData.get("winner_id") || "").trim();
+  if (!winnerId) redirect("/dashboard/payouts");
+  const { error } = await supabase.rpc("prepare_payout_for_admin", { target_winner_id: winnerId });
+  if (error) redirect(payoutPath(winnerId) + "?error=" + encodeURIComponent(error.message));
+  revalidatePath("/dashboard/payouts");
+  redirect(payoutPath(winnerId));
+}
+
+export async function markPayoutPaid(formData: FormData) {
+  const supabase = await getClient();
+  const winnerId = String(formData.get("winner_id") || "").trim();
+  const paymentDate = String(formData.get("payment_date") || "").trim();
+  const method = String(formData.get("method") || "").trim();
+  const deductions = Number(formData.get("other_deductions") || 0);
+  if (!winnerId || !paymentDate || !["UPI","BANK_TRANSFER","CASH","OTHER"].includes(method) || !Number.isInteger(deductions) || deductions < 0) {
+    redirect(payoutPath(winnerId) + "?error=Invalid%20payout%20details.");
+  }
+  const { error } = await supabase.rpc("mark_payout_paid_for_admin", {
+    target_winner_id: winnerId,
+    payout_payment_date: new Date(paymentDate).toISOString(),
+    payout_method: method,
+    payout_reference: String(formData.get("reference") || "").trim() || null,
+    payout_notes: String(formData.get("notes") || "").trim() || null,
+    payout_other_deductions: deductions,
+  });
+  if (error) redirect(payoutPath(winnerId) + "?error=" + encodeURIComponent(error.message));
+  revalidatePath("/dashboard/payouts");
+  revalidatePath(payoutPath(winnerId));
+  redirect(payoutPath(winnerId));
+}
