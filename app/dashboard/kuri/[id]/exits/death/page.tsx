@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { recordDeathSettlement } from "./actions";
 
 export default async function DeathSettlementPage({
   params,
@@ -144,7 +145,7 @@ export default async function DeathSettlementPage({
               ) : null}
             </div>
           ) : nominees.length ? (
-            <form action={`/dashboard/kuri/${id}/exits/death/submit`} method="post" className="mt-5 space-y-5">
+            <form action={recordDeathSettlement} className="mt-5 space-y-5">
               <input type="hidden" name="kuri_id" value={id} />
               <input type="hidden" name="exit_id" value={exitId} />
               <label className="block text-sm font-medium">
