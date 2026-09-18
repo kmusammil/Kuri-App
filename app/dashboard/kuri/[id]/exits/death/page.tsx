@@ -22,24 +22,25 @@ export default async function DeathSettlementPage({
   if (!user) redirect("/login");
   if (!exitId) redirect("/dashboard/kuri/" + id + "/exits");
 
-  const { data: exitRow, error: exitError } = await supabase
-    .from("membership_exits")
-    .select("membership_id")
-    .eq("id", exitId)
-    .maybeSingle();
+  const { data: membershipId, error: membershipIdError } = await supabase.rpc(
+    "get_membership_exit_membership_id_for_admin",
+    { target_exit_id: exitId },
+  );
 
-  if (exitError || !exitRow?.membership_id) {
+  if (membershipIdError || !membershipId) {
     redirect(
       "/dashboard/kuri/" +
         id +
         "/exits?error=" +
-        encodeURIComponent(exitError?.message || "Death exit not found."),
+        encodeURIComponent(
+          membershipIdError?.message || "Death exit not found.",
+        ),
     );
   }
 
   const { data: context, error } = await supabase.rpc(
     "get_death_settlement_context_for_admin",
-    { target_membership_id: exitRow.membership_id },
+    { target_membership_id: membershipId },
   );
 
   const row = context?.[0];
