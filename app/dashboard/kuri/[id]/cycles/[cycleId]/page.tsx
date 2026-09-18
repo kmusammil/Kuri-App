@@ -293,9 +293,15 @@ export default async function CycleDetailPage({
           <div className="flex items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold">Payouts</h2>
-              <p className="mt-1 text-sm text-slate-600">Manage winner payout records from the dedicated payouts area.</p>
+              <p className="mt-1 text-sm text-slate-600">Manage this cycle's finalized winner payout.</p>
             </div>
-            <Link href="/dashboard/payouts" className="rounded-lg border px-4 py-2.5">Open Payouts</Link>
+            {winnerRows?.length ? (
+              <Link href={"/dashboard/payouts/" + winnerRows[0].winner_id} className="rounded-lg bg-slate-900 px-4 py-2.5 text-white">
+                Open winner payout
+              </Link>
+            ) : (
+              <span className="text-sm text-slate-500">Finalize a winner first</span>
+            )}
           </div>
         </section>
 
