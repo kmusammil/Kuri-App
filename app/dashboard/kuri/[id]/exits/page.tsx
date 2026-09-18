@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { redirect } from "next/navigation";
+import { redirect from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createExit, approveExit, recordImmediateRefund, settleExit } from "./actions";
 
