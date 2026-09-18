@@ -381,3 +381,24 @@ export default async function CycleDetailPage({
     </main>
   );
 }
+
+async function transitionCycleStatus(formData: FormData) {
+  "use server";
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const kuriId=String(formData.get("kuri_id")||"").trim();
+  const cycleId=String(formData.get("cycle_id")||"").trim();
+  const targetStatus=String(formData.get("target_status")||"").trim();
+
+  if(!kuriId||!cycleId||!targetStatus) redirect("/dashboard/kuri");
+
+  const { error }=await supabase.rpc("transition_cycle_status_for_admin",{
+    target_cycle_id:cycleId,
+    target_status:targetStatus,
+  });
+
+  if(error) redirect(`/dashboard/kuri/${kuriId}/cycles/${cycleId}?error=${encodeURIComponent(error.message)}`);
+  redirect(`/dashboard/kuri/${kuriId}/cycles/${cycleId}`);
+}
