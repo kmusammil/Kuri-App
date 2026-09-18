@@ -136,6 +136,7 @@ export default async function KuriDetailPage({
               <p className="mt-1 text-sm text-slate-600">Add people to this Kuri and assign membership numbers.</p>
             </div>
             <Link href={`/dashboard/kuri/${id}/memberships/new`} className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white">Add membership</Link>
+            <Link href={`/dashboard/kuri/${id}/exits`} className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium">Membership exits</Link>
           </div>
           {membershipLoadError ? (
             <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">Unable to load memberships: {membershipLoadError}</div>
