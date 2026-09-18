@@ -13,11 +13,11 @@ export async function prepareDraw(formData: FormData) {
   const {data:{user}}=await supabase.auth.getUser();
   if(!user) redirect("/login");
   const cycleId=String(formData.get("cycle_id")||"").trim();
-  if(!cycleId) redirect("/dashboard/kuri");
+  if(!cycleId) redirect("/dashboard/kuri/"+cycleId+"/cycles/"+cycleId);
   const {error}=await supabase.rpc("prepare_draw_for_admin",{target_cycle_id:cycleId});
   if(error) redirect("/dashboard/kuri?error="+encodeURIComponent(error.message));
   revalidatePath("/dashboard/kuri");
-  redirect("/dashboard/kuri");
+  redirect("/dashboard/kuri/"+cycleId+"/cycles/"+cycleId);
 }
 
 export async function setPoolEntry(formData: FormData) {
