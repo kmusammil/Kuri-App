@@ -4,9 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
-function cyclePath(cycleId: string, kuriId?: string) {
-  return kuriId ? "/dashboard/kuri/" + kuriId + "/cycles/" + cycleId : "/dashboard/kuri";
-}
 
 export async function prepareDraw(formData: FormData) {
   const supabase=await createClient();
