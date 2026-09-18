@@ -88,6 +88,45 @@ export default async function KuriDetailPage({
           </div>
         ) : null}
 
+        {kuri.status !== "ARCHIVED" ? (
+          <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold">Kuri lifecycle</h2>
+                <p className="mt-1 text-sm text-slate-600">Move this Kuri through its controlled lifecycle.</p>
+              </div>
+              {kuri.status === "DRAFT" ? (
+                <form action={transitionKuriStatus}>
+                  <input type="hidden" name="kuri_id" value={id} />
+                  <input type="hidden" name="target_status" value="OPEN" />
+                  <button type="submit" className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white">Open Kuri</button>
+                </form>
+              ) : null}
+              {kuri.status === "OPEN" ? (
+                <form action={transitionKuriStatus}>
+                  <input type="hidden" name="kuri_id" value={id} />
+                  <input type="hidden" name="target_status" value="ACTIVE" />
+                  <button type="submit" className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white">Activate Kuri</button>
+                </form>
+              ) : null}
+              {kuri.status === "ACTIVE" ? (
+                <form action={transitionKuriStatus}>
+                  <input type="hidden" name="kuri_id" value={id} />
+                  <input type="hidden" name="target_status" value="COMPLETED" />
+                  <button type="submit" className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white">Complete Kuri</button>
+                </form>
+              ) : null}
+              {kuri.status === "COMPLETED" ? (
+                <form action={transitionKuriStatus}>
+                  <input type="hidden" name="kuri_id" value={id} />
+                  <input type="hidden" name="target_status" value="ARCHIVED" />
+                  <button type="submit" className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium">Archive Kuri</button>
+                </form>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
         <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">Status</p>
@@ -167,6 +206,28 @@ export default async function KuriDetailPage({
       </div>
     </main>
   );
+}
+
+async function transitionKuriStatus(formData: FormData) {
+  "use server";
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const kuriId = String(formData.get("kuri_id") ?? "").trim();
+  const targetStatus = String(formData.get("target_status") ?? "").trim();
+  if (!kuriId || !targetStatus) redirect("/dashboard/kuri");
+
+  const { error } = await supabase.rpc("transition_kuri_status_for_admin", {
+    target_kuri_id: kuriId,
+    target_status: targetStatus,
+  });
+
+  if (error) {
+    redirect(`/dashboard/kuri/${kuriId}?error=${encodeURIComponent(error.message)}`);
+  }
+
+  redirect(`/dashboard/kuri/${kuriId}`);
 }
 
 async function generateSchedule(formData: FormData) {
