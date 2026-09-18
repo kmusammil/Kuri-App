@@ -69,7 +69,7 @@ export default async function KuriDetailPage({
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
               Kuri-App
             </p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight">{kuri.name}</h1>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight">{kuri.name}</h1><p className="mt-3"><Link href={`/dashboard/payments`} className="text-sm font-medium underline">Payments</Link></p>
             {kuri.description ? (
               <p className="mt-2 text-sm text-slate-600">{kuri.description}</p>
             ) : null}
