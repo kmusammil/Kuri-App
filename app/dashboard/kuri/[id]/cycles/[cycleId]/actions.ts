@@ -29,7 +29,7 @@ export async function setPoolEntry(formData: FormData) {
   const include=String(formData.get("include")||"") === "true";
   if(!entryId || !cycleId) redirect("/dashboard/kuri/"+cycleId+"/cycles/"+cycleId);
   const {error}=await supabase.rpc("set_draw_pool_entry_for_admin",{target_entry_id:entryId,include_in_draw:include});
-  if(error) redirect("/dashboard/kuri?error="+encodeURIComponent(error.message));
+  if(error) redirect("/dashboard/kuri/"+cycleId+"/cycles/"+cycleId+"?error="+encodeURIComponent(error.message));
   revalidatePath("/dashboard/kuri/"+cycleId);
   redirect("/dashboard/kuri/"+cycleId+"/cycles/"+cycleId);
 }
