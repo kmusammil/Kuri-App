@@ -290,6 +290,16 @@ export default async function CycleDetailPage({
         </section>
 
         <section className="mt-6 rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold">Payouts</h2>
+              <p className="mt-1 text-sm text-slate-600">Manage winner payout records from the dedicated payouts area.</p>
+            </div>
+            <Link href="/dashboard/payouts" className="rounded-lg border px-4 py-2.5">Open Payouts</Link>
+          </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold">Monthly Winners</h2>
           {winnerError ? (
             <p className="mt-4 text-sm text-red-700">{winnerError.message}</p>
