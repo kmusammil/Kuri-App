@@ -19,7 +19,7 @@ The authenticated boundary suite uses the existing dedicated integration-test wo
 - TEST_PERSON_B_ID and TEST_KURI_B_ID
 - TEST_CYCLE_A_ID
 
-The current fixture is intentionally non-destructive. Positive end-to-end financial/draw tests require additional disposable records and are kept separate from the 27-test boundary suite until their cleanup path is automated.
+The boundary fixture is intentionally non-destructive. The positive workflow creates isolated Kuri records named `Integration E2E <timestamp>` in the dedicated Org A test workspace. Those records are not business data.
 
 ## Run
 
@@ -51,21 +51,31 @@ The suite currently proves:
 - cross-tenant nominees and Muppu records are rejected;
 - invalid membership-exit requests are rejected.
 
-The current local run passes **27/27 authenticated integration tests** using real Supabase Auth sessions.
+The current boundary suite passes **27/27 authenticated integration tests** using real Supabase Auth sessions.
 
-## Next integration layer
+## Positive workflow and concurrency
 
-The next layer will use an isolated disposable Kuri fixture to test the full positive workflow:
+Run the isolated end-to-end workflow with:
+
+    npm run test:integration:e2e
+
+It exercises:
 
 1. create Kuri;
-2. create people/memberships;
-3. generate installments;
-4. create and allocate payment;
-5. advance cycle lifecycle;
-6. prepare/run/finalize draw;
-7. prepare and mark payout paid;
-8. verify financial and winner invariants;
-9. run concurrent draw/payment/settlement race tests;
-10. clean up all disposable fixture data.
+2. generate its cycle;
+3. open the Kuri;
+4. create a membership;
+5. verify generated installment;
+6. create and allocate a payment;
+7. advance the cycle through OPEN -> PAYMENT_CLOSED -> DRAW_PENDING;
+8. prepare the draw;
+9. run two concurrent random-draw requests and require exactly one success;
+10. finalize the selected winner;
+11. prepare the payout;
+12. run two concurrent payout-payment requests and require exactly one success;
+13. verify the payout is PAID with the expected net amount;
+14. return the Kuri to a safe ACTIVE state.
 
-Those tests should never reuse production/business records.
+The workflow creates disposable records and therefore is intentionally separate from the non-destructive 27-test boundary suite.
+
+After a successful or failed run, use `tests/integration/cleanup-positive-fixtures.sql` in the Supabase SQL editor to remove only the `Integration E2E %` fixtures from the dedicated test organization. Do not run it against business/test data outside that organization.
