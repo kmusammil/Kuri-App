@@ -22,11 +22,6 @@ select m.id
 from public.memberships m
 join _e2e_cleanup_kuris k on k.id = m.kuri_id;
 
-create temporary table _e2e_cleanup_payments on commit drop as
-select p.id
-from public.payments p
-join _e2e_cleanup_memberships m on m.id = p.person_id
-where false;
 
 -- Payments are linked to people rather than memberships, so identify the
 -- disposable person through the membership set and its test person ID.
@@ -34,6 +29,9 @@ delete from public.payment_allocations pa
 using public.payments p
 where pa.payment_id = p.id
   and p.reference_number like 'E2E-%';
+
+delete from public.payments
+where reference_number like 'E2E-%';
 
 delete from public.payouts p
 using public.monthly_winners w
