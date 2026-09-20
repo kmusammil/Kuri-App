@@ -2,10 +2,6 @@
 
 This suite exercises the Kuri-App backend through Supabase Auth + PostgREST RPCs using real JWT sessions.
 
-## Why this exists
-
-The SQL regression suite verifies database invariants, privileges, function definitions, and existing data. A privileged SQL connection cannot prove the behavior of a real authenticated client. This suite is the JWT-level complement.
-
 ## Test identities
 
 - Org A ADMIN
@@ -15,15 +11,15 @@ The SQL regression suite verifies database invariants, privileges, function defi
 
 Use dedicated test-only Auth users. Do not use a personal account and do not commit passwords or tokens.
 
-## Fixture requirements
+## Current fixture
 
-Set these environment variables:
+The authenticated boundary suite uses the existing dedicated integration-test workspace records through environment variables:
 
-- TEST_PERSON_A_ID and TEST_KURI_A_ID: objects in Org A
-- TEST_PERSON_B_ID and TEST_KURI_B_ID: objects in Org B
-- TEST_CYCLE_A_ID: a cycle in Org A
+- TEST_PERSON_A_ID and TEST_KURI_A_ID
+- TEST_PERSON_B_ID and TEST_KURI_B_ID
+- TEST_CYCLE_A_ID
 
-The suite intentionally uses read operations and rejected mutations where possible so ordinary runs do not create disposable financial records.
+The current fixture is intentionally non-destructive. Positive end-to-end financial/draw tests require additional disposable records and are kept separate from the 27-test boundary suite until their cleanup path is automated.
 
 ## Run
 
@@ -33,14 +29,16 @@ Install dependencies, then run:
 
 The command uses the dedicated Vitest integration configuration.
 
-## What it proves
+## Current coverage
 
-- real Auth sessions can reach the RPC boundary;
+The suite currently proves:
+
+- real Supabase Auth sessions reach the RPC boundary;
 - anonymous requests are rejected;
 - authenticated ADMIN access works inside the tenant;
 - cross-tenant Kuri/person access is rejected;
 - ordinary members cannot use administrative RPCs;
-- internal lifecycle transition RPCs are not exposed;
+- lifecycle transition RPCs are authenticated-only application APIs;
 - list APIs remain tenant-scoped;
 - cross-tenant payment creation is rejected before mutation;
 - unauthenticated payment creation is rejected;
@@ -55,6 +53,19 @@ The command uses the dedicated Vitest integration configuration.
 
 The current local run passes **27/27 authenticated integration tests** using real Supabase Auth sessions.
 
-## What it does not yet prove
+## Next integration layer
 
-It does not create/settle real financial fixtures, run destructive lifecycle operations, or claim concurrency coverage. Those should be added as isolated disposable fixtures once a dedicated integration-test workspace strategy is established.
+The next layer will use an isolated disposable Kuri fixture to test the full positive workflow:
+
+1. create Kuri;
+2. create people/memberships;
+3. generate installments;
+4. create and allocate payment;
+5. advance cycle lifecycle;
+6. prepare/run/finalize draw;
+7. prepare and mark payout paid;
+8. verify financial and winner invariants;
+9. run concurrent draw/payment/settlement race tests;
+10. clean up all disposable fixture data.
+
+Those tests should never reuse production/business records.
