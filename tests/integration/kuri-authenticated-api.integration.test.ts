@@ -56,8 +56,8 @@ describe('Kuri-App authenticated API boundary', () => {
 
   it('does not expose internal lifecycle transition primitives', async () => {
     const results = await Promise.all([
-      rpc(adminA, 'transition_kuri_status_for_admin', { p_kuri_id: env('TEST_KURI_A_ID'), p_status: 'ACTIVE' }),
-      rpc(adminA, 'transition_cycle_status_for_admin', { p_cycle_id: env('TEST_CYCLE_A_ID'), p_status: 'OPEN' }),
+      rpc(adminA, 'transition_kuri_status_for_admin', { target_kuri_id: env('TEST_KURI_A_ID'), target_status: 'ACTIVE' }),
+      rpc(adminA, 'transition_cycle_status_for_admin', { target_cycle_id: env('TEST_CYCLE_A_ID'), target_status: 'OPEN' }),
     ])
     for (const result of results) { expect(result.data).toBeNull(); expect(result.error).not.toBeNull() }
   })
@@ -75,16 +75,16 @@ describe('Kuri-App authenticated API boundary', () => {
 
   it('rejects a cross-tenant payment mutation before mutation', async () => {
     const { data, error } = await rpc(adminA, 'create_payment_for_admin', {
-      p_person_id: env('TEST_PERSON_B_ID'), p_amount: 1, p_paid_at: new Date().toISOString(),
-      p_method: 'OTHER', p_reference: 'AUTH-INTEGRATION-CROSS-TENANT', p_notes: 'Must be rejected by tenancy boundary.'
+      target_person_id: env('TEST_PERSON_B_ID'), payment_amount: 1, payment_date: new Date().toISOString(),
+      payment_method: 'OTHER', payment_reference: 'AUTH-INTEGRATION-CROSS-TENANT', payment_notes: 'Must be rejected by tenancy boundary.'
     })
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
 
   it('rejects an unauthenticated admin mutation', async () => {
     const { data, error } = await rpc(anonymous, 'create_payment_for_admin', {
-      p_person_id: env('TEST_PERSON_A_ID'), p_amount: 1, p_paid_at: new Date().toISOString(),
-      p_method: 'OTHER', p_reference: 'AUTH-INTEGRATION-ANON', p_notes: 'Must be rejected without JWT.'
+      target_person_id: env('TEST_PERSON_A_ID'), payment_amount: 1, payment_date: new Date().toISOString(),
+      payment_method: 'OTHER', payment_reference: 'AUTH-INTEGRATION-ANON', payment_notes: 'Must be rejected without JWT.'
     })
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
