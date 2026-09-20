@@ -253,6 +253,26 @@ describe('Kuri-App authenticated API boundary', () => {
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
 
+  it('blocks an Org B admin from inserting an email contact for an Org A person', async () => {
+    const { data, error } = await adminB.from('person_emails').insert({
+      person_id: env('TEST_PERSON_A_ID'),
+      email: 'cross-tenant@example.invalid',
+      label: 'TEST',
+      is_primary: false,
+    }).select()
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('blocks an Org B admin from inserting a phone contact for an Org A person', async () => {
+    const { data, error } = await adminB.from('person_phones').insert({
+      person_id: env('TEST_PERSON_A_ID'),
+      phone_number: '+999000000000',
+      label: 'TEST',
+      is_primary: false,
+    }).select()
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
   it('rejects anonymous draw preparation', async () => {
     const { data, error } = await rpc(anonymous, 'prepare_draw_for_admin', {
       target_cycle_id: env('TEST_CYCLE_A_ID'),
