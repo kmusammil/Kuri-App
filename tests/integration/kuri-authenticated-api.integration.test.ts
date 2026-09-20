@@ -35,22 +35,22 @@ describe('Kuri-App authenticated API boundary', () => {
   })
 
   it('allows an Org A admin to resolve an Org A Kuri', async () => {
-    const { data, error } = await rpc(adminA, 'get_kuri_for_admin', { p_kuri_id: env('TEST_KURI_A_ID') })
+    const { data, error } = await rpc(adminA, 'get_kuri_for_admin', { target_kuri_id: env('TEST_KURI_A_ID') })
     expect(error).toBeNull(); expect(data).toBeTruthy()
   })
 
   it('blocks an Org B admin from resolving an Org A Kuri', async () => {
-    const { data, error } = await rpc(adminB, 'get_kuri_for_admin', { p_kuri_id: env('TEST_KURI_A_ID') })
+    const { data, error } = await rpc(adminB, 'get_kuri_for_admin', { target_kuri_id: env('TEST_KURI_A_ID') })
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
 
   it('blocks an Org B admin from resolving an Org A person', async () => {
-    const { data, error } = await rpc(adminB, 'get_person_for_admin', { p_person_id: env('TEST_PERSON_A_ID') })
+    const { data, error } = await rpc(adminB, 'get_person_for_admin', { target_person_id: env('TEST_PERSON_A_ID') })
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
 
   it('allows an Org A admin to resolve an Org A person', async () => {
-    const { data, error } = await rpc(adminA, 'get_person_for_admin', { p_person_id: env('TEST_PERSON_A_ID') })
+    const { data, error } = await rpc(adminA, 'get_person_for_admin', { target_person_id: env('TEST_PERSON_A_ID') })
     expect(error).toBeNull(); expect(data).toBeTruthy()
   })
 
@@ -63,7 +63,7 @@ describe('Kuri-App authenticated API boundary', () => {
   })
 
   it('rejects ordinary members from administrative Kuri reads', async () => {
-    const { data, error } = await rpc(memberA, 'get_kuri_for_admin', { p_kuri_id: env('TEST_KURI_A_ID') })
+    const { data, error } = await rpc(memberA, 'get_kuri_for_admin', { target_kuri_id: env('TEST_KURI_A_ID') })
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
 
