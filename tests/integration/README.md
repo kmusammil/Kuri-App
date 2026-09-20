@@ -43,7 +43,17 @@ The command uses the dedicated Vitest integration configuration.
 - internal lifecycle transition RPCs are not exposed;
 - list APIs remain tenant-scoped;
 - cross-tenant payment creation is rejected before mutation;
-- unauthenticated payment creation is rejected.
+- unauthenticated payment creation is rejected;
+- ordinary members cannot create memberships;
+- cross-tenant membership assignment is rejected;
+- draw preparation, execution, and finalization are blocked before valid lifecycle prerequisites;
+- payout preparation requires a real winner and tenant boundary;
+- non-positive payments and invalid allocations are rejected;
+- direct authenticated inserts into protected payment/draw tables are blocked;
+- cross-tenant nominees and Muppu records are rejected;
+- invalid membership-exit requests are rejected.
+
+The current local run passes **27/27 authenticated integration tests** using real Supabase Auth sessions.
 
 ## What it does not yet prove
 
