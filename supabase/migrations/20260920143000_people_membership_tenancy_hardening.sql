@@ -27,7 +27,7 @@ begin
   update public.people p
   set organization_id = x.organization_id
   from (
-    select m.person_id, min(k.organization_id) as organization_id
+    select m.person_id, (array_agg(k.organization_id))[1] as organization_id
     from public.memberships m
     join public.kuris k on k.id = m.kuri_id
     group by m.person_id
@@ -215,7 +215,7 @@ as $function$
 declare
   target_org_id uuid;
 begin
-  select min(ou.organization_id)
+  select (array_agg(ou.organization_id))[1]
   into target_org_id
   from public.organization_users ou
   where ou.user_id = auth.uid()
