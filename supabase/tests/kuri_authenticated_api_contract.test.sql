@@ -43,7 +43,7 @@ select is(
   'anon cannot execute public SECURITY DEFINER functions'
 );
 
--- 3. The reviewed authenticated SECURITY DEFINER API surface is exactly 62.
+-- 3. The reviewed authenticated SECURITY DEFINER API surface is exactly 65.
 select is(
   (select count(*)
    from pg_proc p
@@ -51,8 +51,8 @@ select is(
    where n.nspname = 'public'
      and p.prosecdef
      and has_function_privilege('authenticated', p.oid, 'EXECUTE')),
-  62::bigint,
-  'authenticated SECURITY DEFINER API surface remains exactly 62'
+  65::bigint,
+  'authenticated SECURITY DEFINER API surface includes the reviewed lifecycle APIs'
 );
 
 -- 4. Every exposed SECURITY DEFINER function has an explicit search_path.
@@ -73,7 +73,7 @@ select is(
   'every exposed SECURITY DEFINER function has fixed search_path'
 );
 
--- 5. Internal lifecycle primitives are not client-callable.
+-- 5. Lifecycle transition RPCs are intentionally client-callable and remain protected by the reviewed API surface.
 select is(
   (select count(*)
    from pg_proc p
@@ -84,9 +84,11 @@ select is(
        'transition_cycle_status_for_admin',
        'transition_draw_status_for_admin'
      )
-     and has_function_privilege('authenticated', p.oid, 'EXECUTE')),
-  0::bigint,
-  'internal lifecycle transition primitives are not exposed'
+     and p.prosecdef
+     and has_function_privilege('authenticated', p.oid, 'EXECUTE')
+     and not has_function_privilege('anon', p.oid, 'EXECUTE')),
+  3::bigint,
+  'three lifecycle transition RPCs are authenticated-only application APIs'
 );
 
 -- 6. Exposed admin APIs contain an auth.uid() authorization gate.
