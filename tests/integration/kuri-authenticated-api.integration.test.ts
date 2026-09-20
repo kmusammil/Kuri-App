@@ -88,4 +88,154 @@ describe('Kuri-App authenticated API boundary', () => {
     })
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
+
+  it('rejects ordinary members from creating memberships', async () => {
+    const { data, error } = await rpc(memberA, 'create_membership_for_admin', {
+      target_kuri_id: env('TEST_KURI_A_ID'),
+      target_person_id: env('TEST_PERSON_A_ID'),
+      target_membership_number: 'AUTH-MEMBER-DENIED',
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('rejects cross-tenant membership assignment', async () => {
+    const { data, error } = await rpc(adminB, 'create_membership_for_admin', {
+      target_kuri_id: env('TEST_KURI_A_ID'),
+      target_person_id: env('TEST_PERSON_A_ID'),
+      target_membership_number: 'AUTH-CROSS-TENANT-MEMBERSHIP',
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('rejects draw preparation while the cycle is not payment-closed', async () => {
+    const { data, error } = await rpc(adminA, 'prepare_draw_for_admin', {
+      target_cycle_id: env('TEST_CYCLE_A_ID'),
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('rejects draw preparation across tenants', async () => {
+    const { data, error } = await rpc(adminB, 'prepare_draw_for_admin', {
+      target_cycle_id: env('TEST_CYCLE_A_ID'),
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('rejects random draw execution before the cycle reaches draw-ready state', async () => {
+    const { data, error } = await rpc(adminA, 'run_random_draw_for_admin', {
+      target_cycle_id: env('TEST_CYCLE_A_ID'),
+      selection_count: 1,
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('rejects draw finalization before a valid draw session exists', async () => {
+    const { data, error } = await rpc(adminA, 'finalize_draw_for_admin', {
+      target_cycle_id: env('TEST_CYCLE_A_ID'),
+      final_membership_ids: [],
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('rejects payout preparation when the referenced winner does not exist', async () => {
+    const { data, error } = await rpc(adminA, 'prepare_payout_for_admin', {
+      target_winner_id: '00000000-0000-0000-0000-000000000001',
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('rejects payout preparation across tenants', async () => {
+    const { data, error } = await rpc(adminB, 'prepare_payout_for_admin', {
+      target_winner_id: '00000000-0000-0000-0000-000000000001',
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('rejects payment creation with a non-positive amount', async () => {
+    const results = await Promise.all([
+      rpc(adminA, 'create_payment_for_admin', {
+        target_person_id: env('TEST_PERSON_A_ID'), payment_amount: 0, payment_date: new Date().toISOString(),
+        payment_method: 'OTHER', payment_reference: 'AUTH-NONPOSITIVE-0', payment_notes: 'Must be rejected.'
+      }),
+      rpc(adminA, 'create_payment_for_admin', {
+        target_person_id: env('TEST_PERSON_A_ID'), payment_amount: -1, payment_date: new Date().toISOString(),
+        payment_method: 'OTHER', payment_reference: 'AUTH-NONPOSITIVE-NEG', payment_notes: 'Must be rejected.'
+      }),
+    ])
+    for (const result of results) { expect(result.data).toBeNull(); expect(result.error).not.toBeNull() }
+  })
+
+  it('rejects allocation against a nonexistent payment or installment', async () => {
+    const { data, error } = await rpc(adminA, 'allocate_payment_for_admin', {
+      target_payment_id: '00000000-0000-0000-0000-000000000001',
+      target_installment_id: '00000000-0000-0000-0000-000000000002',
+      allocation_amount: 1,
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('rejects direct authenticated inserts into the payment ledger', async () => {
+    const { data, error } = await adminA.from('payments').insert({
+      organization_id: '00000000-0000-0000-0000-000000000001',
+      person_id: env('TEST_PERSON_A_ID'),
+      amount: 1,
+      payment_date: new Date().toISOString(),
+      method: 'OTHER',
+      reference_number: 'AUTH-DIRECT-PAYMENT',
+    }).select()
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('rejects direct authenticated inserts into the draw pool', async () => {
+    const { data, error } = await adminA.from('draw_pool_entries').insert({
+      draw_session_id: '00000000-0000-0000-0000-000000000001',
+      membership_id: '00000000-0000-0000-0000-000000000002',
+      system_eligible: false,
+      admin_included: false,
+      override: false,
+    }).select()
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('rejects cross-tenant nominee creation', async () => {
+    const { data, error } = await rpc(adminA, 'create_nominee_for_admin', {
+      target_person_id: env('TEST_PERSON_B_ID'),
+      nominee_name: 'Cross Tenant Test',
+      nominee_relationship: 'Test',
+      nominee_phone: null,
+      nominee_address: null,
+      nominee_notes: 'Must be rejected.',
+      nominee_alias: null,
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('rejects cross-tenant Muppu creation', async () => {
+    const { data, error } = await rpc(adminA, 'create_muppu_record_for_admin', {
+      target_kuri_id: env('TEST_KURI_A_ID'),
+      target_cycle_id: env('TEST_CYCLE_A_ID'),
+      target_person_id: env('TEST_PERSON_B_ID'),
+      muppu_amount: 1,
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('rejects membership exit creation for an unknown membership', async () => {
+    const { data, error } = await rpc(adminA, 'create_membership_exit_for_admin', {
+      target_membership_id: '00000000-0000-0000-0000-000000000001',
+      exit_reason: 'VOLUNTARY_EXIT',
+      target_exit_date: new Date().toISOString().slice(0, 10),
+      target_refund_policy: 'IMMEDIATE',
+      target_refund_amount: 0,
+      target_notes: 'Must be rejected.',
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('rejects anonymous draw preparation', async () => {
+    const { data, error } = await rpc(anonymous, 'prepare_draw_for_admin', {
+      target_cycle_id: env('TEST_CYCLE_A_ID'),
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
 })
