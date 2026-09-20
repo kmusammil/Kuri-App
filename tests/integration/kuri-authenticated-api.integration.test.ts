@@ -280,13 +280,11 @@ describe('Kuri-App authenticated API boundary', () => {
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
 
-  it('scopes authenticated users reads to the caller identity', async () => {
+  it('blocks direct authenticated reads from application user identity records', async () => {
     const { data, error } = await adminA.from('users').select('id,email,person_id')
-    const session = (await adminA.auth.getSession()).data.session
-    expect(error).toBeNull()
-    expect(Array.isArray(data)).toBe(true)
-    expect(data).toHaveLength(1)
-    expect(data?.[0]?.id).toBe(session?.user.id)
+    expect(data).toBeNull()
+    expect(error).not.toBeNull()
+    expect(error?.code).toBe('42501')
   })
 
   it('scopes organization membership reads to organizations the caller belongs to', async () => {
