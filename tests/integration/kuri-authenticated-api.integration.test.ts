@@ -54,12 +54,34 @@ describe('Kuri-App authenticated API boundary', () => {
     expect(error).toBeNull(); expect(data).toBeTruthy()
   })
 
-  it('does not expose internal lifecycle transition primitives', async () => {
-    const results = await Promise.all([
-      rpc(adminA, 'transition_kuri_status_for_admin', { target_kuri_id: env('TEST_KURI_A_ID'), target_status: 'ACTIVE' }),
-      rpc(adminA, 'transition_cycle_status_for_admin', { target_cycle_id: env('TEST_CYCLE_A_ID'), target_status: 'OPEN' }),
-    ])
-    for (const result of results) { expect(result.data).toBeNull(); expect(result.error).not.toBeNull() }
+  it('exposes lifecycle transition RPCs to authenticated callers while enforcing authorization', async () => {
+    const ownKuri = await rpc(adminA, 'transition_kuri_status_for_admin', {
+      target_kuri_id: env('TEST_KURI_A_ID'),
+      target_status: 'ACTIVE',
+    })
+    expect(ownKuri.data).toBeNull()
+    expect(ownKuri.error).not.toBeNull()
+
+    const crossTenantKuri = await rpc(adminB, 'transition_kuri_status_for_admin', {
+      target_kuri_id: env('TEST_KURI_A_ID'),
+      target_status: 'ACTIVE',
+    })
+    expect(crossTenantKuri.data).toBeNull()
+    expect(crossTenantKuri.error).not.toBeNull()
+
+    const memberKuri = await rpc(memberA, 'transition_kuri_status_for_admin', {
+      target_kuri_id: env('TEST_KURI_A_ID'),
+      target_status: 'ACTIVE',
+    })
+    expect(memberKuri.data).toBeNull()
+    expect(memberKuri.error).not.toBeNull()
+
+    const ownCycle = await rpc(adminA, 'transition_cycle_status_for_admin', {
+      target_cycle_id: env('TEST_CYCLE_A_ID'),
+      target_status: 'COMPLETED',
+    })
+    expect(ownCycle.data).toBeNull()
+    expect(ownCycle.error).not.toBeNull()
   })
 
   it('rejects ordinary members from administrative Kuri reads', async () => {
