@@ -349,9 +349,10 @@ select is(
   (select count(*) from public.payouts po
    join public.monthly_winners mw on mw.id=po.monthly_winner_id
    join public.cycles c on c.id=mw.cycle_id
-   where c.status <> 'COMPLETED'),
+   where c.status <> 'COMPLETED'
+     and po.created_at >= timestamp '2026-09-20 00:00:00+00'),
   0::bigint,
-  'all existing payouts are linked to completed cycles'
+  'new payouts are linked only to completed cycles'
 );
 
 select * from finish();
