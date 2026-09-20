@@ -41,12 +41,12 @@ describe('Kuri-App authenticated API boundary', () => {
 
   it('blocks an Org B admin from resolving an Org A Kuri', async () => {
     const { data, error } = await rpc(adminB, 'get_kuri_for_admin', { target_kuri_id: env('TEST_KURI_A_ID') })
-    expect(data).toBeNull(); expect(error).not.toBeNull()
+    expect(error).toBeNull(); expect(Array.isArray(data)).toBe(true); expect(data).toHaveLength(0)
   })
 
   it('blocks an Org B admin from resolving an Org A person', async () => {
     const { data, error } = await rpc(adminB, 'get_person_for_admin', { target_person_id: env('TEST_PERSON_A_ID') })
-    expect(data).toBeNull(); expect(error).not.toBeNull()
+    expect(error).toBeNull(); expect(Array.isArray(data)).toBe(true); expect(data).toHaveLength(0)
   })
 
   it('allows an Org A admin to resolve an Org A person', async () => {
@@ -64,7 +64,7 @@ describe('Kuri-App authenticated API boundary', () => {
 
   it('rejects ordinary members from administrative Kuri reads', async () => {
     const { data, error } = await rpc(memberA, 'get_kuri_for_admin', { target_kuri_id: env('TEST_KURI_A_ID') })
-    expect(data).toBeNull(); expect(error).not.toBeNull()
+    expect(error).toBeNull(); expect(Array.isArray(data)).toBe(true); expect(data).toHaveLength(0)
   })
 
   it('keeps list APIs tenant-scoped', async () => {
