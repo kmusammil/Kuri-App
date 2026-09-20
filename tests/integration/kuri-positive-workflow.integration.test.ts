@@ -151,11 +151,22 @@ describe('Kuri-App positive end-to-end workflow', () => {
     expect(drawSession).toBeTruthy()
     drawSessionId = drawSession as string
 
-    const { data: selections, error: drawError } = await adminA.rpc('run_random_draw_for_admin', {
-      target_cycle_id: cycleId,
-      selection_count: 1,
-    })
-    expect(drawError).toBeNull()
+    const drawAttempts = await Promise.all([
+      adminA.rpc('run_random_draw_for_admin', {
+        target_cycle_id: cycleId,
+        selection_count: 1,
+      }),
+      adminA.rpc('run_random_draw_for_admin', {
+        target_cycle_id: cycleId,
+        selection_count: 1,
+      }),
+    ])
+    const successfulDraws = drawAttempts.filter((attempt) => !attempt.error)
+    const failedDraws = drawAttempts.filter((attempt) => !!attempt.error)
+    expect(successfulDraws).toHaveLength(1)
+    expect(failedDraws).toHaveLength(1)
+
+    const selections = successfulDraws[0].data
     expect(selections).toHaveLength(1)
     expect(selections[0].membership_id).toBe(membershipId)
 
@@ -189,15 +200,26 @@ describe('Kuri-App positive end-to-end workflow', () => {
     expect(preparedPayout).toBeTruthy()
     payoutId = preparedPayout as string
 
-    const { error: payoutPaidError } = await adminA.rpc('mark_payout_paid_for_admin', {
-      target_winner_id: winnerId,
-      payout_payment_date: new Date().toISOString(),
-      payout_method: 'CASH',
-      payout_reference: `E2E-PAYOUT-${suffix}`,
-      payout_notes: 'Disposable authenticated integration fixture',
-      payout_other_deductions: 0,
-    })
-    expect(payoutPaidError).toBeNull()
+    const payoutAttempts = await Promise.all([
+      adminA.rpc('mark_payout_paid_for_admin', {
+        target_winner_id: winnerId,
+        payout_payment_date: new Date().toISOString(),
+        payout_method: 'CASH',
+        payout_reference: `E2E-PAYOUT-A-${suffix}`,
+        payout_notes: 'Disposable authenticated integration fixture',
+        payout_other_deductions: 0,
+      }),
+      adminA.rpc('mark_payout_paid_for_admin', {
+        target_winner_id: winnerId,
+        payout_payment_date: new Date().toISOString(),
+        payout_method: 'CASH',
+        payout_reference: `E2E-PAYOUT-B-${suffix}`,
+        payout_notes: 'Disposable authenticated integration fixture',
+        payout_other_deductions: 0,
+      }),
+    ])
+    expect(payoutAttempts.filter((attempt) => !attempt.error)).toHaveLength(1)
+    expect(payoutAttempts.filter((attempt) => !!attempt.error)).toHaveLength(1)
 
     const { data: payout, error: payoutGetError } = await adminA.rpc('get_payout_for_admin', {
       target_winner_id: winnerId,
