@@ -205,7 +205,6 @@ describe('Kuri-App authenticated API boundary', () => {
       nominee_phone: null,
       nominee_address: null,
       nominee_notes: 'Must be rejected.',
-      nominee_alias: null,
     })
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
