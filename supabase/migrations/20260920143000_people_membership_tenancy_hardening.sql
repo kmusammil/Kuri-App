@@ -38,7 +38,7 @@ begin
 
   if unresolved_count > 0 then
     update public.people
-    set organization_id = (select min(id) from public.organizations)
+    set organization_id = (select (array_agg(id))[1] from public.organizations)
     where organization_id is null;
   end if;
 end $$;
