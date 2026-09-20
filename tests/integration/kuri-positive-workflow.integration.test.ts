@@ -171,7 +171,7 @@ describe('Kuri-App positive end-to-end workflow', () => {
     })
     expect(winnersError).toBeNull()
     expect(winners).toHaveLength(1)
-    winnerId = winners[0].id
+    winnerId = winners[0].winner_id
 
     const { data: completedCycle, error: completedCycleError } = await adminA.rpc(
       'get_cycle_for_admin',
@@ -204,7 +204,7 @@ describe('Kuri-App positive end-to-end workflow', () => {
     })
     expect(payoutGetError).toBeNull()
     expect(payout).toHaveLength(1)
-    expect(payout[0].id).toBe(payoutId)
+    expect(payout[0].payout_id).toBe(payoutId)
     expect(payout[0].status).toBe('PAID')
     expect(payout[0].net_amount).toBe(100)
 
