@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(34);
+select plan(39);
 
 -- 1-4: core schema and RLS invariants
 select ok(
