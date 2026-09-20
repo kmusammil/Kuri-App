@@ -279,4 +279,60 @@ describe('Kuri-App authenticated API boundary', () => {
     })
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
+
+  it('scopes authenticated users reads to the caller identity', async () => {
+    const { data, error } = await adminA.from('users').select('id,email,person_id')
+    const session = (await adminA.auth.getSession()).data.session
+    expect(error).toBeNull()
+    expect(Array.isArray(data)).toBe(true)
+    expect(data).toHaveLength(1)
+    expect(data?.[0]?.id).toBe(session?.user.id)
+  })
+
+  it('scopes organization membership reads to organizations the caller belongs to', async () => {
+    const { data, error } = await adminA.from('organization_users').select('organization_id,user_id,role')
+    const adminBSession = (await adminB.auth.getSession()).data.session
+    expect(error).toBeNull()
+    expect(Array.isArray(data)).toBe(true)
+    expect(data?.some((row: { user_id: string }) => row.user_id === adminBSession?.user.id)).toBe(false)
+  })
+
+  it('rejects direct authenticated writes to organization membership records', async () => {
+    const fakeOrganizationId = '00000000-0000-0000-0000-000000000001'
+    const fakeUserId = '00000000-0000-0000-0000-000000000002'
+
+    const insertResult = await adminA.from('organization_users').insert({
+      organization_id: fakeOrganizationId,
+      user_id: fakeUserId,
+      role: 'ADMIN',
+    }).select()
+    expect(insertResult.data).toBeNull()
+    expect(insertResult.error).not.toBeNull()
+
+    const updateResult = await adminA.from('organization_users')
+      .update({ role: 'MAIN_ADMIN' })
+      .eq('user_id', fakeUserId)
+      .select()
+    expect(updateResult.data).toBeNull()
+    expect(updateResult.error).not.toBeNull()
+  })
+
+  it('rejects direct authenticated writes to application user identity records', async () => {
+    const session = (await adminA.auth.getSession()).data.session
+
+    const insertResult = await adminA.from('users').insert({
+      id: '00000000-0000-0000-0000-000000000003',
+      email: 'forged@example.invalid',
+    }).select()
+    expect(insertResult.data).toBeNull()
+    expect(insertResult.error).not.toBeNull()
+
+    const updateResult = await adminA.from('users')
+      .update({ person_id: env('TEST_PERSON_B_ID') })
+      .eq('id', session?.user.id ?? '00000000-0000-0000-0000-000000000004')
+      .select()
+    expect(updateResult.data).toBeNull()
+    expect(updateResult.error).not.toBeNull()
+  })
+
 })
