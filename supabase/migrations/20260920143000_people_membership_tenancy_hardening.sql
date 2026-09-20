@@ -246,6 +246,9 @@ begin
 end;
 $function$;
 
+drop function if exists public.list_people_for_admin();
+drop function if exists public.get_person_for_admin(uuid);
+
 -- Scope person list/detail APIs to organizations administered by the caller.
 create or replace function public.list_people_for_admin()
 returns table(
