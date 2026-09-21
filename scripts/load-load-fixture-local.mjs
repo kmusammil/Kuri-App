@@ -144,6 +144,7 @@ const rl = readline.createInterface({
   input: fs.createReadStream(fixturePath, { encoding: 'utf8' }),
   crlfDelay: Infinity,
 });
+
 for await (const line of rl) {
   if (!line.trim()) continue;
   const record = JSON.parse(line);
@@ -192,10 +193,7 @@ for (const [kind, rows] of [
   ['selections', selections], ['winners', winners], ['winnerMemberships', winnerMemberships],
   ['payouts', payouts], ['exits', exits], ['refunds', refunds],
 ]) {
-  for (const row of rows) {
-    const syntheticId = row.synthetic_id;
-    maps[kind].set(syntheticId, uuid(syntheticId));
-  }
+  for (const row of rows) maps[kind].set(row.synthetic_id, uuid(row.synthetic_id));
 }
 const idOf = (kind, syntheticId) => {
   const value = maps[kind]?.get(syntheticId);
@@ -228,7 +226,6 @@ sql.push(...insertBatches('organizations',
   ['id','name','description','email','created_at','updated_at'],
   [[orgId, sh(organization.name ?? 'Kuri-App LOCAL LOAD TEST'), sh('Synthetic local-only load-test organization'), sh('loadtest@example.invalid'), 'now()','now()']]
 ));
-
 sql.push(...insertBatches('people',
   ['id','registered_name','display_name','address','notes','organization_id'],
   people.map(p => [maps.people.get(p.synthetic_id), sh(p.registered_name), nullable(p.display_name), nullable(p.address), sh('Synthetic local load-test record'), orgId])
@@ -276,9 +273,10 @@ sql.push(...insertBatches('muppu_records',
   ['id','kuri_id','cycle_id','person_id','amount','status','settlement_method','paid_at','payment_reference'],
   muppu.map(m => [maps.muppu.get(m.synthetic_id), idOf('kuris', m.kuri_synthetic_id), idOf('cycles', m.cycle_synthetic_id), idOf('people', m.person_synthetic_id), m.amount, sh(m.status), m.status === 'PAID' ? sh('PAID_IN_ADVANCE') : 'NULL', m.status === 'PAID' ? sh('2026-08-20T10:00:00Z') : 'NULL', m.status === 'PAID' ? sh('LOAD-' + m.synthetic_id) : 'NULL'])
 ));
+
 sql.push(...insertBatches('draw_sessions',
   ['id','kuri_id','cycle_id','conducted_by','status','started_at','completed_at'],
-  draws.map(d => [maps.draws.get(d.synthetic_id), idOf('kuris', d.kuri_synthetic_id), idOf('cycles', d.cycle_synthetic_id), actorId, sh('POOL_READY'), sh('2026-08-20T10:00:00Z'), 'NULL'])
+  draws.map(d => [maps.draws.get(d.synthetic_id), idOf('kuris', d.kuri_synthetic_id), idOf('cycles', d.cycle_synthetic_id), actorId, sh('DRAFT'), 'NULL', 'NULL'])
 ));
 sql.push(...insertBatches('draw_pool_entries',
   ['id','draw_session_id','membership_id','system_eligible','admin_included','override','override_reason','modified_by'],
@@ -309,6 +307,10 @@ sql.push(...insertBatches('membership_exit_refund_transactions',
   refunds.map(r => [maps.refunds.get(r.synthetic_id), idOf('exits', r.membership_exit_synthetic_id), r.amount, sh(r.payment_method)])
 ));
 
+sql.push(
+  `UPDATE public.draw_sessions SET status = 'DRAWING', started_at = '2026-08-20T10:00:00Z'
+   WHERE status = 'DRAFT';`
+);
 sql.push('COMMIT;');
 
 console.log(`Preparing ${counts.people ?? people.length} people / generating SQL script for local Supabase...`);
