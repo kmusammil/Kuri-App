@@ -44,6 +44,8 @@ select is(
 );
 
 -- 3. The reviewed authenticated SECURITY DEFINER API surface is exactly 65.
+-- Internal state-machine trigger helpers are deliberately excluded from the
+-- client-facing SECURITY DEFINER API boundary.
 select is(
   (select count(*)
    from pg_proc p
@@ -267,7 +269,7 @@ select is(
      select 1
      from pg_trigger tg
      where tg.tgrelid = v.t
-       and tg.tgname like '%domain%identity%'
+       and tg.tgfoid = 'public.enforce_domain_identity_immutability()'::regprocedure
    )),
   6::bigint,
   'critical domain identity immutability triggers exist'
