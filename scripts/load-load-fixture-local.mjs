@@ -320,11 +320,21 @@ for (const winner of winners) {
 }
 for (const cycle of cycles.filter(c => c.status === 'COMPLETED')) {
   const cycleId = idOf('cycles', cycle.synthetic_id);
+  const cycleWinners = winnersByCycle.get(cycle.synthetic_id) ?? [];
+
+  // The fixture rows are stored as their final state, but the database trigger
+  // only permits forward lifecycle transitions. For loading, replay the legal
+  // path from UPCOMING to DRAW_PENDING before creating the winner.
+  sql.push(`UPDATE public.cycles
+    SET status = 'OPEN'
+    WHERE id = ${cycleId} AND status = 'UPCOMING';`);
+  sql.push(`UPDATE public.cycles
+    SET status = 'PAYMENT_CLOSED'
+    WHERE id = ${cycleId} AND status = 'OPEN';`);
   sql.push(`UPDATE public.cycles
     SET status = 'DRAW_PENDING'
     WHERE id = ${cycleId} AND status = 'PAYMENT_CLOSED';`);
 
-  const cycleWinners = winnersByCycle.get(cycle.synthetic_id) ?? [];
   if (cycleWinners.length) {
     sql.push(...insertBatches('monthly_winners',
       ['id','cycle_id','person_id','selection_source','finalized_by','finalized_at','status','notes'],
@@ -335,6 +345,10 @@ for (const cycle of cycles.filter(c => c.status === 'COMPLETED')) {
       ])
     ));
   }
+
+  sql.push(`UPDATE public.cycles
+    SET status = 'COMPLETED'
+    WHERE id = ${cycleId} AND status = 'DRAW_PENDING';`);
 }
 sql.push(...insertBatches('monthly_winner_memberships',
   ['id','monthly_winner_id','membership_id','award_amount'],
