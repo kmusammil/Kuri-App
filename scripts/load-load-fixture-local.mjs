@@ -299,55 +299,37 @@ sql.push('COMMIT;');
 
 
 
-const marker = 'supabase-local';
-
-function runCapture(command, args) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-    let stdout = '', stderr = '';
-    child.stdout.on('data', d => stdout += d);
-    child.stderr.on('data', d => stderr += d);
-    child.on('error', reject);
-    child.on('close', code => code === 0 ? resolve(stdout.trim()) : reject(new Error(stderr || `Command failed: ${code}`)));
-  });
-}
-
-const supabaseCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const cliHelp = await runCapture(supabaseCmd, ['supabase', 'db', '--help']);
-if (!/execute|query|sql/i.test(cliHelp)) {
-  throw new Error('The installed Supabase CLI does not expose a database SQL execution command needed by this loader.');
-}
-
 const totalSqlChars = sql.reduce((sum, statement) => sum + statement.length + 1, 0);
-console.log(`Loading ${fixture.target?.people ?? people.length} people / ${totalSqlChars.toLocaleString()} SQL characters into local Supabase...`);
+console.log(`Preparing ${fixture.target?.people ?? people.length} people / ${totalSqlChars.toLocaleString()} SQL characters for local Supabase...`);
 const started = Date.now();
 
-const sqlDir = path.join(process.cwd(), '.tmp', 'kuri-load-fixture-local');
-fs.mkdirSync(sqlDir, { recursive: true });
+const seedDir = path.join(process.cwd(), '.tmp', 'kuri-load-fixture-local');
+const seedPath = path.join(seedDir, 'seed.sql');
+fs.mkdirSync(seedDir, { recursive: true });
 
-// Split the load into bounded SQL files. This avoids large Windows pipes and
-// keeps failures attributable to a specific stage/table.
-const chunks = [];
-const chunkSize = 1000;
-for (let i = 0; i < sql.length; i += chunkSize) {
-  const chunk = sql.slice(i, i + chunkSize);
-  const filePath = path.join(sqlDir, `chunk-${String(chunks.length + 1).padStart(4, '0')}.sql`);
-  fs.writeFileSync(filePath, chunk.join('\n') + '\n', 'utf8');
-  chunks.push(filePath);
+// The generated SQL is written as a normal seed file. Supabase CLI is then
+// responsible for connecting to the local Postgres instance and executing it.
+// This avoids custom Windows process-pipe handling entirely.
+fs.writeFileSync(seedPath, sql.join('\n') + '\n', 'utf8');
+
+console.log(`Prepared ${path.basename(seedPath)}. Copying it to supabase/seed.sql for db reset...`);
+const projectSeedPath = path.join(process.cwd(), 'supabase', 'seed.sql');
+if (!fs.existsSync(path.dirname(projectSeedPath))) {
+  throw new Error('Supabase project directory not found. Expected ./supabase for local CLI operations.');
 }
 
+const backupSeedPath = path.join(seedDir, 'seed.previous.sql');
+const hadExistingSeed = fs.existsSync(projectSeedPath);
+if (hadExistingSeed) fs.copyFileSync(projectSeedPath, backupSeedPath);
+fs.copyFileSync(seedPath, projectSeedPath);
+
 try {
-  for (let i = 0; i < chunks.length; i += 1) {
-    console.log(`Executing SQL chunk ${i + 1}/${chunks.length}...`);
-    // Use the Supabase CLI's local database reset/seed mechanism only for
-    // supported commands. If the installed CLI has db query/execute support,
-    // invoke it with the chunk file as the SQL source.
-    const chunk = chunks[i];
-    const output = await runCapture(supabaseCmd, ['supabase', 'db', 'query', '--local', '--file', chunk]);
-    if (output) process.stdout.write(output + '\n');
-  }
+  const supabaseCommand = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  await runCapture(supabaseCommand, ['supabase', 'db', 'reset', '--local']);
 } finally {
-  fs.rmSync(sqlDir, { recursive: true, force: true });
+  if (hadExistingSeed) fs.copyFileSync(backupSeedPath, projectSeedPath);
+  else fs.rmSync(projectSeedPath, { force: true });
+  fs.rmSync(seedDir, { recursive: true, force: true });
 }
 
 console.log(JSON.stringify({
@@ -355,5 +337,5 @@ console.log(JSON.stringify({
   organization_id: orgId.replaceAll("'", ''),
   elapsed_seconds: Number(((Date.now() - started) / 1000).toFixed(3)),
   target: 'local Supabase only',
-  transport: 'Supabase CLI local SQL execution'
+  transport: 'Supabase CLI db reset --local with temporary seed.sql'
 }, null, 2));
