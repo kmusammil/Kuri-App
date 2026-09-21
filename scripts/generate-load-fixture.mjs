@@ -193,7 +193,19 @@ for (const cycle of cycles.filter(c => c.status === 'COMPLETED')) {
 
   // Pool entries are intentionally a sample of eligible memberships to keep the
   // fixture size useful without multiplying every row excessively.
-  const pool = kuriMemberships.filter((_, index) => index % 3 === cycle.cycle_number % 3);
+  const exitedForKuri = new Set(
+    membershipExits
+      .filter(e => {
+        const membership = memberships.find(m => m.synthetic_id === e.membership_synthetic_id);
+        return membership?.kuri_synthetic_id === kuri.synthetic_id;
+      })
+      .map(e => e.membership_synthetic_id)
+  );
+  const pool = kuriMemberships.filter(
+    (membership, index) =>
+      !exitedForKuri.has(membership.synthetic_id) &&
+      index % 3 === cycle.cycle_number % 3
+  );
   for (const membership of pool) {
     drawPoolEntries.push({
       synthetic_id: id('pool', drawPoolEntries.length + 1),
