@@ -318,22 +318,36 @@ for (const winner of winners) {
   rows.push(winner);
   winnersByCycle.set(winner.cycle_synthetic_id, rows);
 }
-for (const cycle of cycles.filter(c => c.status === 'COMPLETED')) {
+for (const cycle of cycles) {
   const cycleId = idOf('cycles', cycle.synthetic_id);
   const cycleWinners = winnersByCycle.get(cycle.synthetic_id) ?? [];
 
-  // The fixture rows are stored as their final state, but the database trigger
-  // only permits forward lifecycle transitions. For loading, replay the legal
-  // path from UPCOMING to DRAW_PENDING before creating the winner.
-  sql.push(`UPDATE public.cycles
-    SET status = 'OPEN'
-    WHERE id = ${cycleId} AND status = 'UPCOMING';`);
-  sql.push(`UPDATE public.cycles
-    SET status = 'PAYMENT_CLOSED'
-    WHERE id = ${cycleId} AND status = 'OPEN';`);
-  sql.push(`UPDATE public.cycles
-    SET status = 'DRAW_PENDING'
-    WHERE id = ${cycleId} AND status = 'PAYMENT_CLOSED';`);
+  // Reproduce the legal cycle/draw/winner lifecycle rather than inserting
+  // terminal states directly. The DB triggers remain active throughout.
+  sql.push(`UPDATE public.cycles SET status = 'OPEN' WHERE id = ${cycleId} AND status = 'UPCOMING';`);
+  sql.push(`UPDATE public.cycles SET status = 'PAYMENT_CLOSED' WHERE id = ${cycleId} AND status = 'OPEN';`);
+  sql.push(`UPDATE public.cycles SET status = 'DRAW_PENDING' WHERE id = ${cycleId} AND status = 'PAYMENT_CLOSED';`);
+
+  const draw = draws.find(d => d.cycle_synthetic_id === cycle.synthetic_id);
+  if (draw) {
+    const drawId = idOf('draws', draw.synthetic_id);
+    sql.push(`UPDATE public.draw_sessions SET status = 'POOL_READY' WHERE id = ${drawId} AND status = 'DRAFT';`);
+    sql.push(`UPDATE public.draw_sessions SET status = 'DRAWING', started_at = '2026-08-20T10:00:00Z' WHERE id = ${drawId} AND status = 'POOL_READY';`);
+
+    const drawSelections = selectionsByDraw.get(draw.synthetic_id) ?? [];
+    if (drawSelections.length) {
+      sql.push(...insertBatches('draw_selections',
+        ['id','draw_session_id','membership_id','selection_order','randomization_id'],
+        drawSelections.map(sel => [
+          maps.selections.get(sel.synthetic_id), drawId,
+          idOf('memberships', sel.membership_synthetic_id), sel.selection_order,
+          sh('load-' + sel.synthetic_id)
+        ])
+      ));
+    }
+
+    sql.push(`UPDATE public.draw_sessions SET status = 'RESULTS_READY', completed_at = '2026-08-20T10:02:00Z' WHERE id = ${drawId} AND status = 'DRAWING';`);
+  }
 
   if (cycleWinners.length) {
     sql.push(...insertBatches('monthly_winners',
@@ -346,22 +360,41 @@ for (const cycle of cycles.filter(c => c.status === 'COMPLETED')) {
     ));
   }
 
-  sql.push(`UPDATE public.cycles
-    SET status = 'COMPLETED'
-    WHERE id = ${cycleId} AND status = 'DRAW_PENDING';`);
+  if (draw) {
+    const drawId = idOf('draws', draw.synthetic_id);
+    sql.push(`UPDATE public.draw_sessions SET status = 'FINALIZED', completed_at = '2026-08-20T10:02:00Z' WHERE id = ${drawId} AND status = 'RESULTS_READY';`);
+  }
+
+  sql.push(`UPDATE public.cycles SET status = 'COMPLETED' WHERE id = ${cycleId} AND status = 'DRAW_PENDING';`);
 }
+
 sql.push(...insertBatches('monthly_winner_memberships',
   ['id','monthly_winner_id','membership_id','award_amount'],
   winnerMemberships.map(w => [maps.winnerMemberships.get(w.synthetic_id), idOf('winners', w.monthly_winner_synthetic_id), idOf('memberships', w.membership_synthetic_id), w.award_amount])
 ));
-sql.push(...insertBatches('payouts',
-  ['id','monthly_winner_id','gross_amount','muppu_amount','other_deductions','net_amount','payment_date','method','reference_number','status','processed_by'],
-  payouts.map(p => [maps.payouts.get(p.synthetic_id), idOf('winners', p.monthly_winner_synthetic_id), p.gross_amount, p.muppu_amount ?? 0, p.other_deductions ?? 0, p.net_amount, sh('2026-08-21T10:00:00Z'), sh('BANK_TRANSFER'), sh('LOAD-' + p.synthetic_id), sh('PAID'), actorId])
-));
-sql.push(...insertBatches('membership_exits',
-  ['id','membership_id','reason','exit_date','refund_policy','amount_contributed','refund_amount','status','approved_by','settled_at','notes','settlement_notes'],
-  exits.map(e => [maps.exits.get(e.synthetic_id), idOf('memberships', e.membership_synthetic_id), sh(e.reason), sh('2026-08-01'), sh(e.refund_policy), e.amount_contributed, e.refund_amount, sh('SETTLED'), actorId, sh('2026-08-02T10:00:00Z'), sh('Synthetic local load-test exit'), sh('Synthetic local load-test settlement')])
-));
+
+for (const payout of payouts) {
+  const payoutId = maps.payouts.get(payout.synthetic_id);
+  const winnerId = idOf('winners', payout.monthly_winner_synthetic_id);
+  sql.push(...insertBatches('payouts',
+    ['id','monthly_winner_id','gross_amount','muppu_amount','other_deductions','net_amount','payment_date','method','reference_number','status','processed_by'],
+    [[payoutId, winnerId, payout.gross_amount, payout.muppu_amount ?? 0, payout.other_deductions ?? 0, payout.net_amount, 'NULL', 'NULL', 'NULL', sh('PENDING'), 'NULL']]
+  ));
+  sql.push(`UPDATE public.payouts SET status = 'PROCESSING' WHERE id = ${payoutId} AND status = 'PENDING';`);
+  sql.push(`UPDATE public.payouts SET payment_date = '2026-08-21T10:00:00Z', method = 'BANK_TRANSFER', reference_number = '${'${'}'payout.synthetic_id}', processed_by = ${'${'}actorId}, status = 'PAID' WHERE id = ${'${'}payoutId} AND status = 'PROCESSING';`);
+}
+
+for (const exit of exits) {
+  const exitId = maps.exits.get(exit.synthetic_id);
+  const membershipId = idOf('memberships', exit.membership_synthetic_id);
+  sql.push(...insertBatches('membership_exits',
+    ['id','membership_id','reason','exit_date','refund_policy','amount_contributed','refund_amount','status','approved_by','settled_at','notes','settlement_notes'],
+    [[exitId, membershipId, sh(exit.reason), sh('2026-08-01'), sh(exit.refund_policy), exit.amount_contributed, exit.refund_amount, sh('PENDING'), 'NULL', 'NULL', sh('Synthetic local load-test exit'), 'NULL']]
+  ));
+  sql.push(`UPDATE public.memberships SET status = 'EXITED', exited_at = '2026-08-01T00:00:00Z' WHERE id = ${membershipId} AND status = 'ACTIVE';`);
+  sql.push(`UPDATE public.membership_exits SET status = 'APPROVED', approved_by = ${actorId} WHERE id = ${exitId} AND status = 'PENDING';`);
+  sql.push(`UPDATE public.membership_exits SET status = 'SETTLED', settled_at = '2026-08-02T10:00:00Z' WHERE id = ${exitId} AND status = 'APPROVED';`);
+}
 sql.push(...insertBatches('membership_exit_refund_transactions',
   ['id','membership_exit_id','amount','payment_method'],
   refunds.map(r => [maps.refunds.get(r.synthetic_id), idOf('exits', r.membership_exit_synthetic_id), r.amount, sh(r.payment_method)])
