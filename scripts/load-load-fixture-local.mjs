@@ -61,7 +61,9 @@ function nullable(value) {
   return value == null ? 'NULL' : sh(value);
 }
 function bool(value) {
-  function uuid(seed) {
+  return value ? 'true' : 'false';
+}
+function uuid(seed) {
   // Deterministic UUID using SHA-256 so distinct seeds do not collapse at 32 hex characters.
   // PostgreSQL only requires a valid UUID here; determinism is required for reproducible fixture references.
   const value = crypto.createHash('sha256').update(String(seed), 'utf8').digest('hex').slice(0, 32);
