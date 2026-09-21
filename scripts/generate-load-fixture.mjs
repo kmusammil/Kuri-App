@@ -288,8 +288,16 @@ const fixture = {
   notes: ['Synthetic fixture only.', 'Do not upload to production.', 'This fixture is generated locally and is not a hosted Supabase seed.']
 };
 
+
 const outputPath = path.resolve(output);
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-fs.writeFileSync(outputPath, JSON.stringify(fixture, null, 2) + '\n', 'utf8');
+try {
+  fs.writeFileSync(outputPath, JSON.stringify(fixture, null, 2) + '\n', 'utf8');
+} catch (error) {
+  throw new Error(
+    'Fixture serialization failed. Generate with the documented default output path or use a smaller --people value. ' +
+    String(error?.message ?? error)
+  );
+}
 
 console.log(JSON.stringify({ output: outputPath, counts: fixture.counts, seed, hosted_supabase_mutation: false }, null, 2));
