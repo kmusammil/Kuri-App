@@ -319,52 +319,83 @@ if (!dbContainer) {
 }
 
 const totalSqlChars = sql.reduce((sum, statement) => sum + statement.length + 1, 0);
-console.log(`Loading ${fixture.target?.people ?? people.length} people / ${totalSqlChars.toLocaleString()} SQL characters into ${dbContainer}...`);
+console.log(`Preparing ${fixture.target?.people ?? people.length} people / ${totalSqlChars.toLocaleString()} SQL characters for local Supabase...`);
 const started = Date.now();
 
-await new Promise((resolve, reject) => {
-  const child = spawn(docker, ['exec', '-i', dbContainer, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1'], {
-    stdio: ['pipe', 'inherit', 'pipe'],
-    windowsHide: true
-  });
-  let stderr = '';
-  child.stderr.on('data', d => stderr += d);
-  let settled = false;
-  const fail = (error) => {
-    if (settled) return;
-    settled = true;
-    child.stdin.destroy();
-    reject(error);
-  };
-  child.on('error', fail);
-  child.on('close', code => {
-    if (settled) return;
-    settled = true;
-    if (code === 0) resolve();
-    else reject(new Error(stderr || `psql exited with code ${code}`));
-  });
+const localProjectDir = path.join(process.cwd(), 'supabase-local');
+const localSupabaseDir = path.join(localProjectDir, 'supabase');
+const canonicalMigrationsDir = path.join(process.cwd(), 'supabase', 'migrations');
 
-  (async () => {
-    try {
-      for (const statement of sql) {
-        const chunk = statement + '\n';
-        if (!child.stdin.write(chunk)) {
-          await new Promise((res, rej) => {
-            child.stdin.once('drain', res);
-            child.stdin.once('error', rej);
-          });
-        }
-      }
-      child.stdin.end();
-    } catch (error) {
-      fail(error);
-    }
-  })();
-});
+if (!fs.existsSync(localProjectDir) || !fs.statSync(localProjectDir).isDirectory()) {
+  throw new Error('Local Supabase workspace not found. Expected ./supabase-local.');
+}
+if (!fs.existsSync(localSupabaseDir) || !fs.statSync(localSupabaseDir).isDirectory()) {
+  throw new Error('Local Supabase metadata directory not found. Expected ./supabase-local/supabase.');
+}
+if (!fs.existsSync(canonicalMigrationsDir) || !fs.statSync(canonicalMigrationsDir).isDirectory()) {
+  throw new Error('Canonical migrations directory not found. Expected ./supabase/migrations.');
+}
+
+const localMigrationsDir = path.join(localSupabaseDir, 'migrations');
+fs.rmSync(localMigrationsDir, { recursive: true, force: true });
+fs.mkdirSync(localMigrationsDir, { recursive: true });
+for (const name of fs.readdirSync(canonicalMigrationsDir)) {
+  const source = path.join(canonicalMigrationsDir, name);
+  if (fs.statSync(source).isFile() && name.endsWith('.sql')) {
+    fs.copyFileSync(source, path.join(localMigrationsDir, name));
+  }
+}
+
+const seedDir = path.join(process.cwd(), '.tmp', 'kuri-load-fixture-local');
+const seedPath = path.join(seedDir, 'seed.sql');
+fs.mkdirSync(seedDir, { recursive: true });
+
+fs.writeFileSync(seedPath, sql.join('\\n') + '\\n', 'utf8');
+
+console.log(`Prepared ${path.basename(seedPath)}. Mirrored ${fs.readdirSync(localMigrationsDir).length} canonical migrations. Loading via file-based psql in the local Supabase container...`);
+
+const supabaseDbContainer = 'supabase_db_supabase-local';
+
+function runProcess(command, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: process.cwd(),
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', d => stdout += d);
+    child.stderr.on('data', d => stderr += d);
+    child.once('error', reject);
+    child.once('close', code => {
+      if (code === 0) resolve(stdout.trim());
+      else reject(new Error(stderr.trim() || stdout.trim() || `Command failed with exit code ${code}`));
+    });
+  });
+}
+
+await runProcess('docker', [
+  'cp',
+  seedPath,
+  `${supabaseDbContainer}:/tmp/kuri-load-fixture-seed.sql`,
+]);
+
+await runProcess('docker', [
+  'exec',
+  '-i',
+  supabaseDbContainer,
+  'psql',
+  '-U', 'postgres',
+  '-d', 'postgres',
+  '-v', 'ON_ERROR_STOP=1',
+  '-f', '/tmp/kuri-load-fixture-seed.sql',
+]);
 
 console.log(JSON.stringify({
   loaded: fixture.counts,
   organization_id: orgId.replaceAll("'", ''),
   elapsed_seconds: Number(((Date.now() - started) / 1000).toFixed(3)),
-  target: 'local Supabase Docker only'
+  target: 'local Supabase Docker only',
+  transport: 'file-based psql via docker exec'
 }, null, 2));
