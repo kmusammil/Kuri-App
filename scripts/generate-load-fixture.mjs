@@ -291,13 +291,11 @@ const fixture = {
 
 const outputPath = path.resolve(output);
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-try {
-  fs.writeFileSync(outputPath, JSON.stringify(fixture, null, 2) + '\n', 'utf8');
-} catch (error) {
-  throw new Error(
-    'Fixture serialization failed. Generate with the documented default output path or use a smaller --people value. ' +
-    String(error?.message ?? error)
-  );
+
+const fixtureJson = JSON.stringify(fixture);
+if (fixtureJson.length > 200_000_000) {
+  throw new Error('Fixture exceeds the JSON serialization safety limit. Use the default 20000-person generation through the chunked fixture loader.');
 }
+fs.writeFileSync(outputPath, fixtureJson + '\n', 'utf8');
 
 console.log(JSON.stringify({ output: outputPath, counts: fixture.counts, seed, hosted_supabase_mutation: false }, null, 2));
