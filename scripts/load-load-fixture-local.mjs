@@ -297,7 +297,6 @@ WHERE NOT EXISTS (SELECT 1 FROM public.organizations WHERE id=${orgId});
 
 sql.push('COMMIT;');
 
-const sqlText = sql.join('\n');
 const marker = 'supabase-local';
 const docker = process.platform === 'win32' ? 'docker.exe' : 'docker';
 const dockerArgs = ['ps', '--format', '{{.Names}}'];
@@ -319,7 +318,8 @@ if (!dbContainer) {
   throw new Error('Local Supabase DB container not found. Start it with: npx supabase start --workdir supabase-local');
 }
 
-console.log(`Loading ${fixture.target?.people ?? people.length} people / ${sqlText.length.toLocaleString()} SQL characters into ${dbContainer}...`);
+const totalSqlChars = sql.reduce((sum, statement) => sum + statement.length + 1, 0);
+console.log(`Loading ${fixture.target?.people ?? people.length} people / ${totalSqlChars.toLocaleString()} SQL characters into ${dbContainer}...`);
 const started = Date.now();
 
 await new Promise((resolve, reject) => {
@@ -329,12 +329,37 @@ await new Promise((resolve, reject) => {
   });
   let stderr = '';
   child.stderr.on('data', d => stderr += d);
-  child.on('error', reject);
+  let settled = false;
+  const fail = (error) => {
+    if (settled) return;
+    settled = true;
+    child.stdin.destroy();
+    reject(error);
+  };
+  child.on('error', fail);
   child.on('close', code => {
+    if (settled) return;
+    settled = true;
     if (code === 0) resolve();
     else reject(new Error(stderr || `psql exited with code ${code}`));
   });
-  child.stdin.end(sqlText);
+
+  (async () => {
+    try {
+      for (const statement of sql) {
+        const chunk = statement + '\n';
+        if (!child.stdin.write(chunk)) {
+          await new Promise((res, rej) => {
+            child.stdin.once('drain', res);
+            child.stdin.once('error', rej);
+          });
+        }
+      }
+      child.stdin.end();
+    } catch (error) {
+      fail(error);
+    }
+  })();
 });
 
 console.log(JSON.stringify({
