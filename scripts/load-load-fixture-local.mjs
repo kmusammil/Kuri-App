@@ -308,9 +308,19 @@ sql.push(...insertBatches('membership_exit_refund_transactions',
 ));
 
 sql.push(
-  `UPDATE public.draw_sessions SET status = 'DRAWING', started_at = '2026-08-20T10:00:00Z'
+  `UPDATE public.draw_sessions
+   SET status = 'POOL_READY'
    WHERE status = 'DRAFT';`
 );
+sql.push(
+  `UPDATE public.draw_sessions
+   SET status = 'DRAWING', started_at = '2026-08-20T10:00:00Z'
+   WHERE status = 'POOL_READY';`
+);
+sql.push(...insertBatches('draw_selections',
+  ['id','draw_session_id','membership_id','selection_order','randomization_id'],
+  selections.map(s => [maps.selections.get(s.synthetic_id), idOf('draws', s.draw_synthetic_id), idOf('memberships', s.membership_synthetic_id), s.selection_order, sh('load-' + s.synthetic_id)])
+));
 sql.push('COMMIT;');
 
 console.log(`Preparing ${counts.people ?? people.length} people / generating SQL script for local Supabase...`);
