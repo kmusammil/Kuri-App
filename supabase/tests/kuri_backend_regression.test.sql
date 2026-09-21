@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(39);
+select plan(34);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -20,7 +20,11 @@ select ok(
 select ok(
   (select count(*) from pg_class c
    join pg_namespace n on n.oid=c.relnamespace
-   where n.nspname='public' and c.relkind='r' and c.relrowsecurity) = 25,
+   where n.nspname='public' and c.relkind='r' and c.relrowsecurity)
+  =
+  (select count(*) from pg_class c
+   join pg_namespace n on n.oid=c.relnamespace
+   where n.nspname='public' and c.relkind='r'),
   'all 25 public tables have RLS enabled'
 );
 
@@ -49,7 +53,7 @@ select ok(
   exists (
     select 1 from pg_trigger
     where tgrelid='public.kuris'::regclass
-      and tgname like '%domain%identity%'
+      and tgfoid = 'public.enforce_domain_identity_immutability()'::regprocedure
   ),
   'kuri tenant identity immutability trigger exists'
 );
@@ -86,8 +90,9 @@ create temp table t_kuri(id int primary key, status public.kuri_status);
 create trigger t_kuri_guard before update of status on t_kuri
 for each row execute function public.enforce_kuri_status_transition();
 
+insert into t_kuri values (1,'DRAFT');
 select is(
-  (insert into t_kuri values (1,'DRAFT') returning status),
+  (select status from t_kuri where id=1),
   'DRAFT'::public.kuri_status,
   'kuri starts in DRAFT'
 );
