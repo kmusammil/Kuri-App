@@ -303,29 +303,48 @@ const totalSqlChars = sql.reduce((sum, statement) => sum + statement.length + 1,
 console.log(`Preparing ${fixture.target?.people ?? people.length} people / ${totalSqlChars.toLocaleString()} SQL characters for local Supabase...`);
 const started = Date.now();
 
+const localProjectDir = path.join(process.cwd(), 'supabase-local');
+if (!fs.existsSync(localProjectDir) || !fs.statSync(localProjectDir).isDirectory()) {
+  throw new Error('Local Supabase workspace not found. Expected ./supabase-local.');
+}
+
 const seedDir = path.join(process.cwd(), '.tmp', 'kuri-load-fixture-local');
 const seedPath = path.join(seedDir, 'seed.sql');
 fs.mkdirSync(seedDir, { recursive: true });
 
-// The generated SQL is written as a normal seed file. Supabase CLI is then
-// responsible for connecting to the local Postgres instance and executing it.
-// This avoids custom Windows process-pipe handling entirely.
+// Write the generated SQL to disk. The Supabase CLI owns the database
+// connection and executes the seed file, avoiding custom Windows pipe handling.
 fs.writeFileSync(seedPath, sql.join('\n') + '\n', 'utf8');
 
-console.log(`Prepared ${path.basename(seedPath)}. Copying it to supabase/seed.sql for db reset...`);
-const projectSeedPath = path.join(process.cwd(), 'supabase', 'seed.sql');
-if (!fs.existsSync(path.dirname(projectSeedPath))) {
-  throw new Error('Supabase project directory not found. Expected ./supabase for local CLI operations.');
-}
-
+console.log(`Prepared ${path.basename(seedPath)}. Copying it to supabase-local/seed.sql for db reset...`);
+const projectSeedPath = path.join(localProjectDir, 'seed.sql');
 const backupSeedPath = path.join(seedDir, 'seed.previous.sql');
 const hadExistingSeed = fs.existsSync(projectSeedPath);
 if (hadExistingSeed) fs.copyFileSync(projectSeedPath, backupSeedPath);
 fs.copyFileSync(seedPath, projectSeedPath);
 
+function runCapture(command, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: process.cwd(),
+      shell: process.platform === 'win32',
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', d => stdout += d);
+    child.stderr.on('data', d => stderr += d);
+    child.once('error', reject);
+    child.once('close', code => {
+      if (code === 0) resolve(stdout.trim());
+      else reject(new Error(stderr.trim() || stdout.trim() || `Command failed with exit code ${code}`));
+    });
+  });
+}
+
 try {
-  const supabaseCommand = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  await runCapture(supabaseCommand, ['supabase', 'db', 'reset', '--local']);
+  await runCapture('npx', ['supabase', 'db', 'reset', '--local', '--workdir', 'supabase-local']);
 } finally {
   if (hadExistingSeed) fs.copyFileSync(backupSeedPath, projectSeedPath);
   else fs.rmSync(projectSeedPath, { force: true });
