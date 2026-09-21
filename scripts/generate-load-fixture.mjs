@@ -95,7 +95,7 @@ for (const kuri of kuris) {
       cycle_number: n,
       period_start: '2026-' + String(((n - 1) % 12) + 1).padStart(2, '0') + '-01',
       period_end: '2026-' + String(((n - 1) % 12) + 1).padStart(2, '0') + '-28',
-      status: n <= 8 ? 'COMPLETED' : 'UPCOMING'
+      status: 'UPCOMING'
     });
   }
 }
@@ -217,7 +217,7 @@ for (const cycle of cycles.filter(c => c.status === 'COMPLETED')) {
     synthetic_id: id('draw', drawNumber),
     kuri_synthetic_id: cycle.kuri_synthetic_id,
     cycle_synthetic_id: cycle.synthetic_id,
-    status: 'FINALIZED'
+    status: 'DRAFT'
   };
   drawSessions.push(draw);
 
