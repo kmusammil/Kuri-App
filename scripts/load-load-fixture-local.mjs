@@ -112,7 +112,8 @@ function insertBatches(table, columns, rows, batchSize = 250) {
 
 const sql = [];
 sql.push('BEGIN;');
-sql.push(`DO $fixture$ BEGIN IF NOT EXISTS (SELECT 1 FROM public.users) THEN RAISE EXCEPTION 'No local public.users row exists. Run the local authenticated integration tests once before loading the fixture.'; END IF; END $fixture$;`);
+sql.push(`INSERT INTO auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)\nVALUES ('00000000-0000-0000-0000-000000000099', 'authenticated', 'authenticated', 'kuri-load-fixture@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now())\nON CONFLICT (id) DO NOTHING;`);
+sql.push(`DO $fixture$ BEGIN IF NOT EXISTS (SELECT 1 FROM public.users) THEN RAISE EXCEPTION 'No local public.users row exists after deterministic Auth bootstrap.'; END IF; END $fixture$;`);
 sql.push("SET LOCAL synchronous_commit = off;");
 sql.push("SET LOCAL statement_timeout = 0;");
 sql.push(`TRUNCATE TABLE public.audit_logs, public.membership_exit_refund_transactions, public.payouts, public.monthly_winner_memberships, public.monthly_winners, public.draw_selections, public.draw_pool_entries, public.draw_sessions, public.muppu_records, public.membership_exits, public.payment_allocations, public.payments, public.nominees, public.installments, public.memberships, public.cycles, public.kuris, public.person_emails, public.person_phones, public.people, public.organization_users, public.organizations CASCADE;`);
