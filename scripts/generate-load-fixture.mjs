@@ -179,6 +179,29 @@ for (let i = 0; i < memberships.length; i += 7) {
   });
 }
 
+// A small exited-membership population exercises exit/refund relationships.
+for (let i = 0; i < memberships.length; i += 100) {
+  const membership = memberships[i];
+  const exit = {
+    synthetic_id: id('exit', membershipExits.length + 1),
+    membership_synthetic_id: membership.synthetic_id,
+    reason: 'VOLUNTARY_EXIT',
+    refund_policy: 'AT_MATURITY',
+    amount_contributed: 8000,
+    refund_amount: 8000,
+    status: 'SETTLED'
+  };
+  membershipExits.push(exit);
+  if (i % 200 === 0) {
+    membershipExitRefundTransactions.push({
+      synthetic_id: id('refund', membershipExitRefundTransactions.length + 1),
+      membership_exit_synthetic_id: exit.synthetic_id,
+      amount: 8000,
+      payment_method: 'BANK_TRANSFER'
+    });
+  }
+}
+
 // Completed cycles receive finalized synthetic draw/winner/payout records.
 for (const cycle of cycles.filter(c => c.status === 'COMPLETED')) {
   const kuriMemberships = memberships.filter(m => m.kuri_synthetic_id === cycle.kuri_synthetic_id);
@@ -193,17 +216,10 @@ for (const cycle of cycles.filter(c => c.status === 'COMPLETED')) {
 
   // Pool entries are intentionally a sample of eligible memberships to keep the
   // fixture size useful without multiplying every row excessively.
-  const exitedForKuri = new Set(
-    membershipExits
-      .filter(e => {
-        const membership = memberships.find(m => m.synthetic_id === e.membership_synthetic_id);
-        return membership?.kuri_synthetic_id === kuri.synthetic_id;
-      })
-      .map(e => e.membership_synthetic_id)
-  );
+  const exitedMembershipIds = new Set(membershipExits.map(e => e.membership_synthetic_id));
   const pool = kuriMemberships.filter(
     (membership, index) =>
-      !exitedForKuri.has(membership.synthetic_id) &&
+      !exitedMembershipIds.has(membership.synthetic_id) &&
       index % 3 === cycle.cycle_number % 3
   );
   for (const membership of pool) {
@@ -248,19 +264,6 @@ for (const cycle of cycles.filter(c => c.status === 'COMPLETED')) {
   });
 }
 
-// A small exited-membership population exercises exit/refund relationships.
-for (let i = 0; i < memberships.length; i += 100) {
-  const membership = memberships[i];
-  const exit = {
-    synthetic_id: id('exit', membershipExits.length + 1),
-    membership_synthetic_id: membership.synthetic_id,
-    reason: 'VOLUNTARY_EXIT',
-    refund_policy: 'AT_MATURITY',
-    amount_contributed: 8000,
-    refund_amount: 8000,
-    status: 'SETTLED'
-  };
-  membershipExits.push(exit);
   if (i % 200 === 0) {
     membershipExitRefundTransactions.push({
       synthetic_id: id('refund', membershipExitRefundTransactions.length + 1),
