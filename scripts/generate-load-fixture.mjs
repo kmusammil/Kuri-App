@@ -85,22 +85,205 @@ for (let i = 0; i < people.length; i += 1) {
   }
 }
 
+const cycles = [];
+const installments = [];
+const payments = [];
+const paymentAllocations = [];
+const nominees = [];
+const muppuRecords = [];
+const drawSessions = [];
+const drawPoolEntries = [];
+const drawSelections = [];
+const monthlyWinners = [];
+const monthlyWinnerMemberships = [];
+const payouts = [];
+const membershipExits = [];
+const membershipExitRefundTransactions = [];
+
+// Twelve monthly cycles per synthetic Kuri.
+for (const kuri of kuris) {
+  for (let n = 1; n <= kuri.number_of_cycles; n += 1) {
+    cycles.push({
+      synthetic_id: id('cycle', cycles.length + 1),
+      kuri_synthetic_id: kuri.synthetic_id,
+      cycle_number: n,
+      period_start: '2026-' + String(((n - 1) % 12) + 1).padStart(2, '0') + '-01',
+      period_end: '2026-' + String(((n - 1) % 12) + 1).padStart(2, '0') + '-28',
+      status: n <= 8 ? 'COMPLETED' : 'UPCOMING'
+    });
+  }
+}
+
+// One installment per membership/cycle. This deliberately creates a realistic
+// relational workload rather than unrelated rows.
+for (const membership of memberships) {
+  for (const cycle of cycles.filter(c => c.kuri_synthetic_id === membership.kuri_synthetic_id)) {
+    const installmentIndex = installments.length + 1;
+    const paid = cycle.status === 'COMPLETED' ? 1000 : 0;
+    installments.push({
+      synthetic_id: id('installment', installmentIndex),
+      membership_synthetic_id: membership.synthetic_id,
+      cycle_synthetic_id: cycle.synthetic_id,
+      amount_due: 1000,
+      amount_paid: paid,
+      status: paid === 1000 ? 'PAID' : 'UNPAID'
+    });
+  }
+}
+
+// Payments are generated for a substantial but bounded portion of paid installments.
+// Multiple installments may be covered by one payment.
+for (let i = 0; i < installments.length; i += 1) {
+  const installment = installments[i];
+  if (installment.status !== 'PAID' || i % 3 !== 0) continue;
+  const paymentIndex = payments.length + 1;
+  const payment = {
+    synthetic_id: id('payment', paymentIndex),
+    person_synthetic_id: memberships.find(m => m.synthetic_id === installment.membership_synthetic_id).person_synthetic_id,
+    amount: 1000,
+    status: 'APPROVED',
+    method: ['UPI', 'BANK_TRANSFER', 'CASH'][paymentIndex % 3]
+  };
+  payments.push(payment);
+  paymentAllocations.push({
+    synthetic_id: id('allocation', paymentAllocations.length + 1),
+    payment_synthetic_id: payment.synthetic_id,
+    installment_synthetic_id: installment.synthetic_id,
+    amount: 1000
+  });
+}
+
+// One nominee for a subset of people.
+for (let i = 0; i < people.length; i += 4) {
+  nominees.push({
+    synthetic_id: id('nominee', nominees.length + 1),
+    person_synthetic_id: people[i].synthetic_id,
+    name: 'Synthetic Nominee ' + (i + 1),
+    relationship: 'Family',
+    phone: '91000' + String(i + 1).padStart(5, '0')
+  });
+}
+
+// Muppu records are sparse and attached to completed cycles.
+for (let i = 0; i < memberships.length; i += 7) {
+  const membership = memberships[i];
+  const cycle = cycles.find(c => c.kuri_synthetic_id === membership.kuri_synthetic_id && c.cycle_number === 8);
+  if (!cycle) continue;
+  muppuRecords.push({
+    synthetic_id: id('muppu', muppuRecords.length + 1),
+    kuri_synthetic_id: membership.kuri_synthetic_id,
+    cycle_synthetic_id: cycle.synthetic_id,
+    person_synthetic_id: membership.person_synthetic_id,
+    amount: 100,
+    status: (i % 2 === 0) ? 'DEDUCTED' : 'PAID'
+  });
+}
+
+// Completed cycles receive finalized synthetic draw/winner/payout records.
+for (const cycle of cycles.filter(c => c.status === 'COMPLETED')) {
+  const kuriMemberships = memberships.filter(m => m.kuri_synthetic_id === cycle.kuri_synthetic_id);
+  const drawNumber = drawSessions.length + 1;
+  const draw = {
+    synthetic_id: id('draw', drawNumber),
+    kuri_synthetic_id: cycle.kuri_synthetic_id,
+    cycle_synthetic_id: cycle.synthetic_id,
+    status: 'FINALIZED'
+  };
+  drawSessions.push(draw);
+
+  // Pool entries are intentionally a sample of eligible memberships to keep the
+  // fixture size useful without multiplying every row excessively.
+  const pool = kuriMemberships.filter((_, index) => index % 3 === cycle.cycle_number % 3);
+  for (const membership of pool) {
+    drawPoolEntries.push({
+      synthetic_id: id('pool', drawPoolEntries.length + 1),
+      draw_synthetic_id: draw.synthetic_id,
+      membership_synthetic_id: membership.synthetic_id,
+      system_eligible: true,
+      admin_included: true
+    });
+  }
+
+  const winnerMembership = pool[0];
+  if (!winnerMembership) continue;
+  drawSelections.push({
+    synthetic_id: id('selection', drawSelections.length + 1),
+    draw_synthetic_id: draw.synthetic_id,
+    membership_synthetic_id: winnerMembership.synthetic_id,
+    selection_order: 1
+  });
+
+  const winner = {
+    synthetic_id: id('winner', monthlyWinners.length + 1),
+    cycle_synthetic_id: cycle.synthetic_id,
+    person_synthetic_id: winnerMembership.person_synthetic_id
+  };
+  monthlyWinners.push(winner);
+  monthlyWinnerMemberships.push({
+    synthetic_id: id('winner-membership', monthlyWinnerMemberships.length + 1),
+    monthly_winner_synthetic_id: winner.synthetic_id,
+    membership_synthetic_id: winnerMembership.synthetic_id,
+    award_amount: 100000
+  });
+  payouts.push({
+    synthetic_id: id('payout', payouts.length + 1),
+    monthly_winner_synthetic_id: winner.synthetic_id,
+    gross_amount: 100000,
+    muppu_amount: 0,
+    other_deductions: 0,
+    net_amount: 100000,
+    status: 'PAID'
+  });
+}
+
+// A small exited-membership population exercises exit/refund relationships.
+for (let i = 0; i < memberships.length; i += 100) {
+  const membership = memberships[i];
+  const exit = {
+    synthetic_id: id('exit', membershipExits.length + 1),
+    membership_synthetic_id: membership.synthetic_id,
+    reason: 'VOLUNTARY_EXIT',
+    refund_policy: 'AT_MATURITY',
+    amount_contributed: 8000,
+    refund_amount: 8000,
+    status: 'SETTLED'
+  };
+  membershipExits.push(exit);
+  if (i % 200 === 0) {
+    membershipExitRefundTransactions.push({
+      synthetic_id: id('refund', membershipExitRefundTransactions.length + 1),
+      membership_exit_synthetic_id: exit.synthetic_id,
+      amount: 8000,
+      payment_method: 'BANK_TRANSFER'
+    });
+  }
+}
+
 const fixture = {
-  schema_version: 1,
+  schema_version: 2,
   generator: 'kuri-app-local-load-fixture',
   generated_at: new Date().toISOString(),
   seed,
   target: { people: peopleCount, maximum_supported_people: 20000 },
   safety: { local_only: true, hosted_supabase_mutation: false, contains_real_person_data: false },
   organization: { synthetic_id: 'organization-load-test', name: 'Kuri-App LOCAL LOAD TEST' },
-  kuris,
-  people,
-  memberships,
-  notes: ['Synthetic fixture only.', 'Do not upload to production.', 'Dependent financial/draw records will be added in later fixture stages.']
+  counts: {
+    people: people.length, kuris: kuris.length, cycles: cycles.length, memberships: memberships.length,
+    installments: installments.length, payments: payments.length, payment_allocations: paymentAllocations.length,
+    nominees: nominees.length, muppu_records: muppuRecords.length, draw_sessions: drawSessions.length,
+    draw_pool_entries: drawPoolEntries.length, draw_selections: drawSelections.length, monthly_winners: monthlyWinners.length,
+    monthly_winner_memberships: monthlyWinnerMemberships.length, payouts: payouts.length, membership_exits: membershipExits.length,
+    membership_exit_refund_transactions: membershipExitRefundTransactions.length
+  },
+  organization_records: [{ synthetic_id: 'organization-load-test', name: 'Kuri-App LOCAL LOAD TEST' }],
+  kuris, people, memberships, cycles, installments, payments, paymentAllocations, nominees, muppuRecords,
+  drawSessions, drawPoolEntries, drawSelections, monthlyWinners, monthlyWinnerMemberships, payouts,
+  membershipExits, membershipExitRefundTransactions,
+  notes: ['Synthetic fixture only.', 'Do not upload to production.', 'This fixture is generated locally and is not a hosted Supabase seed.']
 };
 
 const outputPath = path.resolve(output);
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, JSON.stringify(fixture, null, 2) + '\n', 'utf8');
 
-console.log(JSON.stringify({ output: outputPath, people: people.length, memberships: memberships.length, kuris: kuris.length, seed, hosted_supabase_mutation: false }, null, 2));
+console.log(JSON.stringify({ output: outputPath, counts: fixture.counts, seed, hosted_supabase_mutation: false }, null, 2));
