@@ -348,10 +348,24 @@ for (const cycle of cycles.filter(c => c.target_status === 'COMPLETED')) {
   sql.push(`UPDATE public.cycles SET status = 'COMPLETED' WHERE id = ${cycleId} AND status = 'DRAW_PENDING';`);
 }
 
-sql.push(...insertBatches('monthly_winner_memberships',
-  ['id','monthly_winner_id','membership_id','award_amount'],
-  winnerMemberships.map(w => [maps.winnerMemberships.get(w.synthetic_id), idOf('winners', w.monthly_winner_synthetic_id), idOf('memberships', w.membership_synthetic_id), w.award_amount])
-));
+for (const cycle of cycles.filter(c => c.target_status === 'COMPLETED')) {
+  const cycleWinners = winnersByCycle.get(cycle.synthetic_id) ?? [];
+  const cycleWinnerIds = new Set(cycleWinners.map(w => w.synthetic_id));
+  const cycleWinnerMemberships = winnerMemberships.filter(
+    w => cycleWinnerIds.has(w.monthly_winner_synthetic_id)
+  );
+  if (cycleWinnerMemberships.length) {
+    sql.push(...insertBatches('monthly_winner_memberships',
+      ['id','monthly_winner_id','membership_id','award_amount'],
+      cycleWinnerMemberships.map(w => [
+        maps.winnerMemberships.get(w.synthetic_id),
+        idOf('winners', w.monthly_winner_synthetic_id),
+        idOf('memberships', w.membership_synthetic_id),
+        w.award_amount
+      ])
+    ));
+  }
+}
 
 for (const payout of payouts) {
   const payoutId = maps.payouts.get(payout.synthetic_id);
