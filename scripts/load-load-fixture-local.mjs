@@ -381,7 +381,7 @@ for (const payout of payouts) {
     [[payoutId, winnerId, payout.gross_amount, payout.muppu_amount ?? 0, payout.other_deductions ?? 0, payout.net_amount, 'NULL', 'NULL', 'NULL', sh('PENDING'), 'NULL']]
   ));
   sql.push(`UPDATE public.payouts SET status = 'PROCESSING' WHERE id = ${payoutId} AND status = 'PENDING';`);
-  sql.push(`UPDATE public.payouts SET payment_date = '2026-08-21T10:00:00Z', method = 'BANK_TRANSFER', reference_number = '${'${'}'payout.synthetic_id}', processed_by = ${'${'}actorId}, status = 'PAID' WHERE id = ${'${'}payoutId} AND status = 'PROCESSING';`);
+  sql.push(`UPDATE public.payouts SET payment_date = '2026-08-21T10:00:00Z', method = 'BANK_TRANSFER', reference_number = 'LOAD-\${payout.synthetic_id}', processed_by = \${actorId}, status = 'PAID' WHERE id = \${payoutId} AND status = 'PROCESSING';`);
 }
 
 for (const exit of exits) {
