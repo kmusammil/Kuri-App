@@ -297,13 +297,14 @@ WHERE NOT EXISTS (SELECT 1 FROM public.organizations WHERE id=${orgId});
 
 sql.push('COMMIT;');
 
+
 const marker = 'supabase-local';
 const docker = process.platform === 'win32' ? 'docker.exe' : 'docker';
 const dockerArgs = ['ps', '--format', '{{.Names}}'];
 
-function runCapture(command, args, options = {}) {
+function runCapture(command, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, ...options });
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     let stdout = '', stderr = '';
     child.stdout.on('data', d => stdout += d);
     child.stderr.on('data', d => stderr += d);
@@ -328,15 +329,23 @@ fs.writeFileSync(sqlTempPath, sql.join('\n') + '\n', 'utf8');
 
 try {
   if (process.platform === 'win32') {
-    const psScript = [
+    const psCommand = [
       '$ErrorActionPreference = "Stop"',
-      `$path = "${sqlTempPath.replaceAll('"', '\\"')}"`,
-      `$container = "${dbContainer.replaceAll('"', '\\"')}"`,
-      `$docker = "${docker.replaceAll('"', '\\"')}"`,
-      '& $docker exec -i $container psql -U postgres -d postgres -v ON_ERROR_STOP=1 < $path',
+      '$path = ' + JSON.stringify(sqlTempPath),
+      '$container = ' + JSON.stringify(dbContainer),
+      '$docker = ' + JSON.stringify(docker),
+      '& $docker exec -i $container psql -U postgres -d postgres -v ON_ERROR_STOP=1 | Out-String',
       'if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }'
     ].join('; ');
-    await runCapture('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', psScript]);
+    // PowerShell cannot use Unix-style input redirection for native commands.
+    // Use Get-Content -Raw and a native process is still subject to a Node-free
+    // stdin boundary, so invoke cmd.exe whose redirection is supported.
+    const cmdLine = [
+      'type "' + sqlTempPath.replaceAll('"', '""') + '"',
+      '|',
+      '"' + docker.replaceAll('"', '""') + '" exec -i "' + dbContainer.replaceAll('"', '""') + '" psql -U postgres -d postgres -v ON_ERROR_STOP=1'
+    ].join(' ');
+    await runCapture('cmd.exe', ['/d', '/s', '/c', cmdLine]);
   } else {
     const child = spawn(docker, ['exec', '-i', dbContainer, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1'], {
       stdio: ['pipe', 'inherit', 'pipe'], windowsHide: true
@@ -373,5 +382,5 @@ console.log(JSON.stringify({
   organization_id: orgId.replaceAll("'", ''),
   elapsed_seconds: Number(((Date.now() - started) / 1000).toFixed(3)),
   target: 'local Supabase Docker only',
-  transport: process.platform === 'win32' ? 'PowerShell file redirection -> docker exec stdin' : 'file stream -> docker exec stdin'
+  transport: process.platform === 'win32' ? 'cmd type -> docker exec stdin' : 'file stream -> docker exec stdin'
 }, null, 2));
