@@ -16,6 +16,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 
 const args = process.argv.slice(2);
@@ -60,12 +61,12 @@ function nullable(value) {
   return value == null ? 'NULL' : sh(value);
 }
 function bool(value) {
-  return value ? 'true' : 'false';
-}
-function uuid(seed) {
-  // Deterministic UUID-like mapping. PostgreSQL does not need these to be random.
-  const hex = Buffer.from(String(seed), 'utf8').toString('hex').padEnd(32, '0').slice(0, 32);
-  return `'${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20,32)}'`;
+  rfunction uuid(seed) {
+  // Deterministic UUID using SHA-256 so distinct seeds do not collapse at 32 hex characters.
+  // PostgreSQL only requires a valid UUID here; determinism is required for reproducible fixture references.
+  const value = crypto.createHash('sha256').update(String(seed), 'utf8').digest('hex').slice(0, 32);
+  return "'" + value.slice(0,8) + "-" + value.slice(8,12) + "-" + value.slice(12,16) + "-" + value.slice(16,20) + "-" + value.slice(20,32) + "'";
+}(16,20)}-${hex.slice(20,32)}'`;
 }
 
 const orgId = uuid(syntheticOrg);
