@@ -318,7 +318,7 @@ for (const winner of winners) {
   rows.push(winner);
   winnersByCycle.set(winner.cycle_synthetic_id, rows);
 }
-for (const cycle of cycles) {
+for (const cycle of cycles.filter(c => c.target_status === 'COMPLETED')) {
   const cycleId = idOf('cycles', cycle.synthetic_id);
   const cycleWinners = winnersByCycle.get(cycle.synthetic_id) ?? [];
 
