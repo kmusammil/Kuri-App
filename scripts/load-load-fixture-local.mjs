@@ -227,8 +227,8 @@ sql.push(...insertBatches('draw_sessions',
   ['id','kuri_id','cycle_id','conducted_by','status','started_at','completed_at'],
   draws.map(d => [
     maps.draws.get(d.synthetic_id), idOf('kuris', d.kuri_synthetic_id),
-    idOf('cycles', d.cycle_synthetic_id), actorId, sh('FINALIZED'),
-    sh('2026-08-20T10:00:00Z'), sh('2026-08-20T10:01:00Z')
+    idOf('cycles', d.cycle_synthetic_id), actorId, sh('POOL_READY'),
+    sh('2026-08-20T10:00:00Z'), 'NULL'
   ])
 ));
 
