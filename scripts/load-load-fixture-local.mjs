@@ -322,36 +322,56 @@ const totalSqlChars = sql.reduce((sum, statement) => sum + statement.length + 1,
 console.log(`Loading ${fixture.target?.people ?? people.length} people / ${totalSqlChars.toLocaleString()} SQL characters into ${dbContainer}...`);
 const started = Date.now();
 
-// Avoid pushing a ~100 MB+ SQL script through a long-lived Node/Docker stdin
-// pipe on Windows. That transport can terminate with write EOF and accumulate
-// socket listeners. Copy a temporary SQL file into the local DB container and
-// let psql read it directly instead.
+// Keep the SQL file on the host, then stream it to a single docker exec pipe.
+// Unlike the previous implementation, this never accumulates the whole input
+// in child.stdin and therefore avoids the Windows write-EOF/listener problem.
 const sqlTempPath = path.join(process.cwd(), '.tmp', 'kuri-load-fixture-local.sql');
 fs.mkdirSync(path.dirname(sqlTempPath), { recursive: true });
 fs.writeFileSync(sqlTempPath, sql.join('\\n') + '\\n', 'utf8');
 
-try {
-  await runCapture(docker, ['cp', sqlTempPath, `${dbContainer}:/tmp/kuri-load-fixture-local.sql`]);
-  await runCapture(docker, [
-    'exec', dbContainer, 'psql',
+await new Promise((resolve, reject) => {
+  const child = spawn(docker, [
+    'exec', '-i', dbContainer, 'psql',
     '-U', 'postgres',
     '-d', 'postgres',
-    '-v', 'ON_ERROR_STOP=1',
-    '-f', '/tmp/kuri-load-fixture-local.sql'
-  ]);
-} finally {
-  fs.rmSync(sqlTempPath, { force: true });
-  try {
-    await runCapture(docker, ['exec', dbContainer, 'rm', '-f', '/tmp/kuri-load-fixture-local.sql']);
-  } catch {
-    // Best-effort cleanup; preserve the primary database command result.
-  }
-}
+    '-v', 'ON_ERROR_STOP=1'
+  ], {
+    stdio: ['pipe', 'inherit', 'pipe'],
+    windowsHide: true
+  });
+
+  let stderr = '';
+  let settled = false;
+  child.stderr.on('data', d => stderr += d);
+
+  const fail = (error) => {
+    if (settled) return;
+    settled = true;
+    child.stdin.destroy();
+    reject(error);
+  };
+
+  child.on('error', fail);
+  child.on('close', code => {
+    if (settled) return;
+    settled = true;
+    if (code === 0) resolve();
+    else reject(new Error(stderr || `psql exited with code ${code}`));
+  });
+
+  const input = fs.createReadStream(sqlTempPath, { encoding: 'utf8', highWaterMark: 1024 * 1024 });
+
+  input.on('error', fail);
+  child.stdin.on('error', fail);
+  input.pipe(child.stdin);
+});
+
+fs.rmSync(sqlTempPath, { force: true });
 
 console.log(JSON.stringify({
   loaded: fixture.counts,
   organization_id: orgId.replaceAll("'", ''),
   elapsed_seconds: Number(((Date.now() - started) / 1000).toFixed(3)),
   target: 'local Supabase Docker only',
-  transport: 'docker cp + psql -f'
+  transport: 'file stream -> docker exec stdin'
 }, null, 2));
