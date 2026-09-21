@@ -215,7 +215,7 @@ sql.push(...insertBatches('muppu_records',
   muppu.map(m => [
     maps.muppu.get(m.synthetic_id), idOf('kuris', m.kuri_synthetic_id),
     idOf('cycles', m.cycle_synthetic_id), idOf('people', m.person_synthetic_id), m.amount,
-    sh(m.status), m.status === 'PAID' ? sh('DIRECT_PAYMENT') : 'NULL',
+    sh(m.status), m.status === 'PAID' ? sh('PAID_IN_ADVANCE') : 'NULL',
     m.status === 'PAID' ? sh('2026-08-20T10:00:00Z') : 'NULL',
     m.status === 'PAID' ? sh('LOAD-' + m.synthetic_id) : 'NULL'
   ])
