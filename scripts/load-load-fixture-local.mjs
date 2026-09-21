@@ -282,10 +282,35 @@ sql.push(...insertBatches('draw_pool_entries',
   ['id','draw_session_id','membership_id','system_eligible','admin_included','override','override_reason','modified_by'],
   pools.map(p => [maps.pools.get(p.synthetic_id), idOf('draws', p.draw_synthetic_id), idOf('memberships', p.membership_synthetic_id), bool(p.system_eligible), bool(p.admin_included), bool(p.override ?? false), nullable(p.override_reason), actorId])
 ));
-sql.push(...insertBatches('draw_selections',
-  ['id','draw_session_id','membership_id','selection_order','randomization_id'],
-  selections.map(s => [maps.selections.get(s.synthetic_id), idOf('draws', s.draw_synthetic_id), idOf('memberships', s.membership_synthetic_id), s.selection_order, sh('load-' + s.synthetic_id)])
-));
+// Each selection requires its own draw session to be DRAWING or RESULTS_READY.
+// Keep the transition scoped per draw so trigger-visible state matches the row being inserted.
+const selectionsByDraw = new Map();
+for (const selection of selections) {
+  const rows = selectionsByDraw.get(selection.draw_synthetic_id) ?? [];
+  rows.push(selection);
+  selectionsByDraw.set(selection.draw_synthetic_id, rows);
+}
+for (const draw of draws) {
+  const drawId = idOf('draws', draw.synthetic_id);
+  sql.push(`UPDATE public.draw_sessions
+    SET status = 'POOL_READY'
+    WHERE id = ${drawId} AND status = 'DRAFT';`);
+  sql.push(`UPDATE public.draw_sessions
+    SET status = 'DRAWING', started_at = '2026-08-20T10:00:00Z'
+    WHERE id = ${drawId} AND status = 'POOL_READY';`);
+
+  const drawSelections = selectionsByDraw.get(draw.synthetic_id) ?? [];
+  if (drawSelections.length) {
+    sql.push(...insertBatches('draw_selections',
+      ['id','draw_session_id','membership_id','selection_order','randomization_id'],
+      drawSelections.map(s => [maps.selections.get(s.synthetic_id), drawId, idOf('memberships', s.membership_synthetic_id), s.selection_order, sh('load-' + s.synthetic_id)])
+    ));
+  }
+
+  sql.push(`UPDATE public.draw_sessions
+    SET status = 'RESULTS_READY', completed_at = '2026-08-20T10:02:00Z'
+    WHERE id = ${drawId} AND status = 'DRAWING';`);
+}
 sql.push(...insertBatches('monthly_winners',
   ['id','cycle_id','person_id','selection_source','finalized_by','finalized_at','status','notes'],
   winners.map(w => [maps.winners.get(w.synthetic_id), idOf('cycles', w.cycle_synthetic_id), idOf('people', w.person_synthetic_id), sh('RANDOM_DRAW'), actorId, sh('2026-08-20T10:02:00Z'), sh('FINALIZED'), sh('Synthetic local load-test winner')])
@@ -307,16 +332,6 @@ sql.push(...insertBatches('membership_exit_refund_transactions',
   refunds.map(r => [maps.refunds.get(r.synthetic_id), idOf('exits', r.membership_exit_synthetic_id), r.amount, sh(r.payment_method)])
 ));
 
-sql.push(
-  `UPDATE public.draw_sessions
-   SET status = 'POOL_READY'
-   WHERE status = 'DRAFT';`
-);
-sql.push(
-  `UPDATE public.draw_sessions
-   SET status = 'DRAWING', started_at = '2026-08-20T10:00:00Z'
-   WHERE status = 'POOL_READY';`
-);
 sql.push(...insertBatches('draw_selections',
   ['id','draw_session_id','membership_id','selection_order','randomization_id'],
   selections.map(s => [maps.selections.get(s.synthetic_id), idOf('draws', s.draw_synthetic_id), idOf('memberships', s.membership_synthetic_id), s.selection_order, sh('load-' + s.synthetic_id)])
