@@ -218,7 +218,7 @@ const sql = [];
 sql.push('BEGIN;');
 sql.push('SET LOCAL synchronous_commit = off;');
 sql.push('SET LOCAL statement_timeout = 0;');
-sql.push('TRUNCATE TABLE public.audit_logs, public.membership_exit_refund_transactions, public.payouts, public.monthly_winner_memberships, public.monthly_winners, public.draw_selections, public.draw_pool_entries, public.draw_sessions, public.muppu_records, public.membership_exits, public.payment_allocations, public.payments, public.nominees, public.installments, public.memberships, public.cycles, public.kuris, public.person_emails, public.person_phones, public.people, public.organization_users, public.organizations CASCADE;');
+sql.push('TRUNCATE TABLE public.audit_logs, public.membership_exit_refund_transactions, public.payouts, public.monthly_winner_memberships, public.monthly_winners, public.draw_selections, public.draw_pool_entries, public.draw_sessions, public.muppu_records, public.membership_exits, public.payment_allocations, public.payments, public.nominees, public.installments, public.memberships, public.cycles, public.kuris, public.person_phones, public.person_emails, public.people, public.organization_users, public.organizations CASCADE;');
 sql.push("INSERT INTO auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at) VALUES ('00000000-0000-0000-0000-000000000099', 'authenticated', 'authenticated', 'kuri-load-fixture@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()) ON CONFLICT (id) DO NOTHING;");
 sql.push("DO $fixture$ BEGIN IF NOT EXISTS (SELECT 1 FROM public.users WHERE id = '00000000-0000-0000-0000-000000000099') THEN RAISE EXCEPTION 'No deterministic local public.users row exists after Auth bootstrap.'; END IF; END $fixture$;");
 
@@ -290,40 +290,19 @@ for (const selection of selections) {
   rows.push(selection);
   selectionsByDraw.set(selection.draw_synthetic_id, rows);
 }
-for (const draw of draws) {
-  const drawId = idOf('draws', draw.synthetic_id);
-  sql.push(`UPDATE public.draw_sessions
-    SET status = 'POOL_READY'
-    WHERE id = ${drawId} AND status = 'DRAFT';`);
-  sql.push(`UPDATE public.draw_sessions
-    SET status = 'DRAWING', started_at = '2026-08-20T10:00:00Z'
-    WHERE id = ${drawId} AND status = 'POOL_READY';`);
-
-  const drawSelections = selectionsByDraw.get(draw.synthetic_id) ?? [];
-  if (drawSelections.length) {
-    sql.push(...insertBatches('draw_selections',
-      ['id','draw_session_id','membership_id','selection_order','randomization_id'],
-      drawSelections.map(s => [maps.selections.get(s.synthetic_id), drawId, idOf('memberships', s.membership_synthetic_id), s.selection_order, sh('load-' + s.synthetic_id)])
-    ));
-  }
-
-  sql.push(`UPDATE public.draw_sessions
-    SET status = 'RESULTS_READY', completed_at = '2026-08-20T10:02:00Z'
-    WHERE id = ${drawId} AND status = 'DRAWING';`);
-}
-// Winners require the related cycle to be DRAW_PENDING, and the draw must be RESULTS_READY.
 const winnersByCycle = new Map();
 for (const winner of winners) {
   const rows = winnersByCycle.get(winner.cycle_synthetic_id) ?? [];
   rows.push(winner);
   winnersByCycle.set(winner.cycle_synthetic_id, rows);
 }
+
+// Draw selections and winners are replayed only inside the legal lifecycle below.
+// This keeps each draw_selection insertion to exactly one occurrence.
 for (const cycle of cycles.filter(c => c.target_status === 'COMPLETED')) {
   const cycleId = idOf('cycles', cycle.synthetic_id);
   const cycleWinners = winnersByCycle.get(cycle.synthetic_id) ?? [];
 
-  // Reproduce the legal cycle/draw/winner lifecycle rather than inserting
-  // terminal states directly. The DB triggers remain active throughout.
   sql.push(`UPDATE public.cycles SET status = 'OPEN' WHERE id = ${cycleId} AND status = 'UPCOMING';`);
   sql.push(`UPDATE public.cycles SET status = 'PAYMENT_CLOSED' WHERE id = ${cycleId} AND status = 'OPEN';`);
   sql.push(`UPDATE public.cycles SET status = 'DRAW_PENDING' WHERE id = ${cycleId} AND status = 'PAYMENT_CLOSED';`);
@@ -381,7 +360,7 @@ for (const payout of payouts) {
     [[payoutId, winnerId, payout.gross_amount, payout.muppu_amount ?? 0, payout.other_deductions ?? 0, payout.net_amount, 'NULL', 'NULL', 'NULL', sh('PENDING'), 'NULL']]
   ));
   sql.push(`UPDATE public.payouts SET status = 'PROCESSING' WHERE id = ${payoutId} AND status = 'PENDING';`);
-  sql.push(`UPDATE public.payouts SET payment_date = '2026-08-21T10:00:00Z', method = 'BANK_TRANSFER', reference_number = 'LOAD-\${payout.synthetic_id}', processed_by = \${actorId}, status = 'PAID' WHERE id = \${payoutId} AND status = 'PROCESSING';`);
+  sql.push(`UPDATE public.payouts SET payment_date = '2026-08-21T10:00:00Z', method = 'BANK_TRANSFER', reference_number = 'LOAD-${payout.synthetic_id}', processed_by = ${actorId}, status = 'PAID' WHERE id = ${payoutId} AND status = 'PROCESSING';`);
 }
 
 for (const exit of exits) {
