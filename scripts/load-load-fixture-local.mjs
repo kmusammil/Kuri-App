@@ -220,6 +220,7 @@ sql.push('SET LOCAL synchronous_commit = off;');
 sql.push('SET LOCAL statement_timeout = 0;');
 sql.push('TRUNCATE TABLE public.audit_logs, public.membership_exit_refund_transactions, public.payouts, public.monthly_winner_memberships, public.monthly_winners, public.draw_selections, public.draw_pool_entries, public.draw_sessions, public.muppu_records, public.membership_exits, public.payment_allocations, public.payments, public.nominees, public.installments, public.memberships, public.cycles, public.kuris, public.person_phones, public.person_emails, public.people, public.organization_users, public.organizations CASCADE;');
 sql.push("INSERT INTO auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at) VALUES ('00000000-0000-0000-0000-000000000099', 'authenticated', 'authenticated', 'kuri-load-fixture@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()) ON CONFLICT (id) DO NOTHING;");
+sql.push("INSERT INTO public.users (id, email, status) VALUES ('00000000-0000-0000-0000-000000000099', 'kuri-load-fixture@example.invalid', 'ACTIVE') ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, status = EXCLUDED.status;");
 sql.push("DO $fixture$ BEGIN IF NOT EXISTS (SELECT 1 FROM public.users WHERE id = '00000000-0000-0000-0000-000000000099') THEN RAISE EXCEPTION 'No deterministic local public.users row exists after Auth bootstrap.'; END IF; END $fixture$;");
 
 sql.push(...insertBatches('organizations',
