@@ -97,7 +97,7 @@ const idOf = (kind, syntheticId) => {
 
 const exitedMemberships = new Set(exits.map(x => x.membership_synthetic_id));
 
-function insertBatches(table, columns, rows, batchSize = 1000) {
+function insertBatches(table, columns, rows, batchSize = 250) {
   const statements = [];
   for (let i = 0; i < rows.length; i += batchSize) {
     const batch = rows.slice(i, i + batchSize);
