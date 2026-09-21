@@ -65,8 +65,7 @@ function bool(value) {
   // Deterministic UUID using SHA-256 so distinct seeds do not collapse at 32 hex characters.
   // PostgreSQL only requires a valid UUID here; determinism is required for reproducible fixture references.
   const value = crypto.createHash('sha256').update(String(seed), 'utf8').digest('hex').slice(0, 32);
-  return "'" + value.slice(0,8) + "-" + value.slice(8,12) + "-" + value.slice(12,16) + "-" + value.slice(16,20) + "-" + value.slice(20,32) + "'";
-}(16,20)}-${hex.slice(20,32)}'`;
+  return "'" + value.slice(0, 8) + "-" + value.slice(8, 12) + "-" + value.slice(12, 16) + "-" + value.slice(16, 20) + "-" + value.slice(20, 32) + "'";
 }
 
 const orgId = uuid(syntheticOrg);
