@@ -12,7 +12,8 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:integration:e2e": "vitest run --config vitest.integration.config.ts tests/integration/kuri-positive-workflow.integration.test.ts",
     "test:load-fixture": "node scripts/generate-load-fixture.mjs && node scripts/validate-load-fixture.mjs",
-    "test:load-fixture:local": "node scripts/load-load-fixture-local.mjs"
+    "test:load-fixture:local": "node scripts/load-load-fixture-local.mjs",
+    "test:db:local": "node scripts/test-db-local.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "latest",
