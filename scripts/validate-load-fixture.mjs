@@ -140,9 +140,14 @@ for (const installment of installments) {
       'installment status/amount mismatch: ' + installment.synthetic_id);
   }
 }
+const installmentsByMembership = new Map();
+for (const installment of installments) {
+  const key = installment.membership_synthetic_id;
+  installmentsByMembership.set(key, (installmentsByMembership.get(key) ?? 0) + 1);
+}
 for (const membership of memberships) {
   const expected = (cyclesByKuri.get(membership.kuri_synthetic_id) ?? []).length;
-  const actual = installments.filter((row) => row.membership_synthetic_id === membership.synthetic_id).length;
+  const actual = installmentsByMembership.get(membership.synthetic_id) ?? 0;
   check(actual === expected, 'wrong installment count for membership: ' + membership.synthetic_id);
 }
 
@@ -218,14 +223,22 @@ for (const draw of draws) {
     drawCycleKeys.add(key);
   }
 }
+const poolKeySet = new Set(pool.map((row) => row.draw_synthetic_id + '|' + row.membership_synthetic_id));
 for (const selection of selections) {
   const draw = drawsById.get(selection.draw_synthetic_id);
-  const entry = pool.find((row) => row.draw_synthetic_id === selection.draw_synthetic_id && row.membership_synthetic_id === selection.membership_synthetic_id);
+  const key = selection.draw_synthetic_id + '|' + selection.membership_synthetic_id;
   check(Boolean(draw), 'selection references missing draw: ' + selection.synthetic_id);
-  check(Boolean(entry), 'selection references membership outside draw pool: ' + selection.synthetic_id);
+  check(poolKeySet.has(key), 'selection references membership outside draw pool: ' + selection.synthetic_id);
+}
+const winnerMembershipsByWinner = new Map();
+for (const row of winnerMemberships) {
+  if (!winnerMembershipsByWinner.has(row.monthly_winner_synthetic_id)) {
+    winnerMembershipsByWinner.set(row.monthly_winner_synthetic_id, []);
+  }
+  winnerMembershipsByWinner.get(row.monthly_winner_synthetic_id).push(row);
 }
 for (const winner of winners) {
-  const winnerMembershipRows = winnerMemberships.filter((row) => row.monthly_winner_synthetic_id === winner.synthetic_id);
+  const winnerMembershipRows = winnerMembershipsByWinner.get(winner.synthetic_id) ?? [];
   check(winnerMembershipRows.length === 1, 'winner must have exactly one linked membership: ' + winner.synthetic_id);
   check(peopleById.has(winner.person_synthetic_id), 'winner references missing person: ' + winner.synthetic_id);
   for (const row of winnerMembershipRows) {
