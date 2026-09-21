@@ -299,13 +299,11 @@ sql.push('COMMIT;');
 
 
 
-const docker = process.platform === 'win32' ? 'docker.exe' : 'docker';
 const marker = 'supabase-local';
-const dockerArgs = ['ps', '--format', '{{.Names}}'];
 
-function runCapture(command, args, options = {}) {
+function runCapture(command, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, ...options });
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     let stdout = '', stderr = '';
     child.stdout.on('data', d => stdout += d);
     child.stderr.on('data', d => stderr += d);
@@ -314,39 +312,48 @@ function runCapture(command, args, options = {}) {
   });
 }
 
-const containerNames = (await runCapture(docker, dockerArgs)).split(/\r?\n/).filter(Boolean);
-const dbContainer = containerNames.find(name => name.startsWith('supabase_db_') && name.includes(marker));
-if (!dbContainer) {
-  throw new Error('Local Supabase DB container not found. Start it with: npx supabase start --workdir supabase-local');
+const supabaseCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+const cliHelp = await runCapture(supabaseCmd, ['supabase', 'db', '--help']);
+if (!/execute|query|sql/i.test(cliHelp)) {
+  throw new Error('The installed Supabase CLI does not expose a database SQL execution command needed by this loader.');
 }
 
 const totalSqlChars = sql.reduce((sum, statement) => sum + statement.length + 1, 0);
-console.log(`Loading ${fixture.target?.people ?? people.length} people / ${totalSqlChars.toLocaleString()} SQL characters into local Postgres at 127.0.0.1:54322...`);
+console.log(`Loading ${fixture.target?.people ?? people.length} people / ${totalSqlChars.toLocaleString()} SQL characters into local Supabase...`);
 const started = Date.now();
 
-const sqlTempPath = path.join(process.cwd(), '.tmp', 'kuri-load-fixture-local.sql');
-fs.mkdirSync(path.dirname(sqlTempPath), { recursive: true });
-fs.writeFileSync(sqlTempPath, sql.join('\n') + '\n', 'utf8');
+const sqlDir = path.join(process.cwd(), '.tmp', 'kuri-load-fixture-local');
+fs.mkdirSync(sqlDir, { recursive: true });
+
+// Split the load into bounded SQL files. This avoids large Windows pipes and
+// keeps failures attributable to a specific stage/table.
+const chunks = [];
+const chunkSize = 1000;
+for (let i = 0; i < sql.length; i += chunkSize) {
+  const chunk = sql.slice(i, i + chunkSize);
+  const filePath = path.join(sqlDir, `chunk-${String(chunks.length + 1).padStart(4, '0')}.sql`);
+  fs.writeFileSync(filePath, chunk.join('\n') + '\n', 'utf8');
+  chunks.push(filePath);
+}
 
 try {
-  // Supabase documents the local Postgres service on 127.0.0.1:54322.
-  // Use the host-installed psql client so Docker is not involved in the
-  // ~110 MB SQL transport at all.
-  const psql = process.platform === 'win32' ? 'psql.exe' : 'psql';
-  await runCapture(psql, [
-    'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
-    '-v', 'ON_ERROR_STOP=1',
-    '-f', sqlTempPath
-  ]);
+  for (let i = 0; i < chunks.length; i += 1) {
+    console.log(`Executing SQL chunk ${i + 1}/${chunks.length}...`);
+    // Use the Supabase CLI's local database reset/seed mechanism only for
+    // supported commands. If the installed CLI has db query/execute support,
+    // invoke it with the chunk file as the SQL source.
+    const chunk = chunks[i];
+    const output = await runCapture(supabaseCmd, ['supabase', 'db', 'query', '--local', '--file', chunk]);
+    if (output) process.stdout.write(output + '\n');
+  }
 } finally {
-  fs.rmSync(sqlTempPath, { force: true });
+  fs.rmSync(sqlDir, { recursive: true, force: true });
 }
 
 console.log(JSON.stringify({
   loaded: fixture.counts,
   organization_id: orgId.replaceAll("'", ''),
   elapsed_seconds: Number(((Date.now() - started) / 1000).toFixed(3)),
-  target: 'local Supabase Postgres only',
-  transport: 'host psql -f -> 127.0.0.1:54322'
+  target: 'local Supabase only',
+  transport: 'Supabase CLI local SQL execution'
 }, null, 2));
-
