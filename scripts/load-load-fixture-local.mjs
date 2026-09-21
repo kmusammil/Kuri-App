@@ -301,9 +301,9 @@ const marker = 'supabase-local';
 const docker = process.platform === 'win32' ? 'docker.exe' : 'docker';
 const dockerArgs = ['ps', '--format', '{{.Names}}'];
 
-function runCapture(command, args) {
+function runCapture(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, ...options });
     let stdout = '', stderr = '';
     child.stdout.on('data', d => stdout += d);
     child.stderr.on('data', d => stderr += d);
@@ -312,7 +312,7 @@ function runCapture(command, args) {
   });
 }
 
-const containerNames = (await runCapture(docker, dockerArgs)).split(/\\r?\\n/).filter(Boolean);
+const containerNames = (await runCapture(docker, dockerArgs)).split(/\r?\n/).filter(Boolean);
 const dbContainer = containerNames.find(name => name.startsWith('supabase_db_') && name.includes(marker));
 if (!dbContainer) {
   throw new Error('Local Supabase DB container not found. Start it with: npx supabase start --workdir supabase-local');
@@ -322,56 +322,56 @@ const totalSqlChars = sql.reduce((sum, statement) => sum + statement.length + 1,
 console.log(`Loading ${fixture.target?.people ?? people.length} people / ${totalSqlChars.toLocaleString()} SQL characters into ${dbContainer}...`);
 const started = Date.now();
 
-// Keep the SQL file on the host, then stream it to a single docker exec pipe.
-// Unlike the previous implementation, this never accumulates the whole input
-// in child.stdin and therefore avoids the Windows write-EOF/listener problem.
 const sqlTempPath = path.join(process.cwd(), '.tmp', 'kuri-load-fixture-local.sql');
 fs.mkdirSync(path.dirname(sqlTempPath), { recursive: true });
-fs.writeFileSync(sqlTempPath, sql.join('\\n') + '\\n', 'utf8');
+fs.writeFileSync(sqlTempPath, sql.join('\n') + '\n', 'utf8');
 
-await new Promise((resolve, reject) => {
-  const child = spawn(docker, [
-    'exec', '-i', dbContainer, 'psql',
-    '-U', 'postgres',
-    '-d', 'postgres',
-    '-v', 'ON_ERROR_STOP=1'
-  ], {
-    stdio: ['pipe', 'inherit', 'pipe'],
-    windowsHide: true
-  });
-
-  let stderr = '';
-  let settled = false;
-  child.stderr.on('data', d => stderr += d);
-
-  const fail = (error) => {
-    if (settled) return;
-    settled = true;
-    child.stdin.destroy();
-    reject(error);
-  };
-
-  child.on('error', fail);
-  child.on('close', code => {
-    if (settled) return;
-    settled = true;
-    if (code === 0) resolve();
-    else reject(new Error(stderr || `psql exited with code ${code}`));
-  });
-
-  const input = fs.createReadStream(sqlTempPath, { encoding: 'utf8', highWaterMark: 1024 * 1024 });
-
-  input.on('error', fail);
-  child.stdin.on('error', fail);
-  input.pipe(child.stdin);
-});
-
-fs.rmSync(sqlTempPath, { force: true });
+try {
+  if (process.platform === 'win32') {
+    const psScript = [
+      '$ErrorActionPreference = "Stop"',
+      `$path = "${sqlTempPath.replaceAll('"', '\\"')}"`,
+      `$container = "${dbContainer.replaceAll('"', '\\"')}"`,
+      `$docker = "${docker.replaceAll('"', '\\"')}"`,
+      '& $docker exec -i $container psql -U postgres -d postgres -v ON_ERROR_STOP=1 < $path',
+      'if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }'
+    ].join('; ');
+    await runCapture('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', psScript]);
+  } else {
+    const child = spawn(docker, ['exec', '-i', dbContainer, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1'], {
+      stdio: ['pipe', 'inherit', 'pipe'], windowsHide: true
+    });
+    let stderr = '';
+    child.stderr.on('data', d => stderr += d);
+    const input = fs.createReadStream(sqlTempPath, { encoding: 'utf8', highWaterMark: 1024 * 1024 });
+    await new Promise((resolve, reject) => {
+      let settled = false;
+      const fail = error => {
+        if (settled) return;
+        settled = true;
+        input.destroy();
+        child.stdin.destroy();
+        reject(error);
+      };
+      child.on('error', fail);
+      child.stdin.on('error', fail);
+      input.on('error', fail);
+      child.on('close', code => {
+        if (settled) return;
+        settled = true;
+        code === 0 ? resolve() : reject(new Error(stderr || `psql exited with code ${code}`));
+      });
+      input.pipe(child.stdin);
+    });
+  }
+} finally {
+  fs.rmSync(sqlTempPath, { force: true });
+}
 
 console.log(JSON.stringify({
   loaded: fixture.counts,
   organization_id: orgId.replaceAll("'", ''),
   elapsed_seconds: Number(((Date.now() - started) / 1000).toFixed(3)),
   target: 'local Supabase Docker only',
-  transport: 'file stream -> docker exec stdin'
+  transport: process.platform === 'win32' ? 'PowerShell file redirection -> docker exec stdin' : 'file stream -> docker exec stdin'
 }, null, 2));
