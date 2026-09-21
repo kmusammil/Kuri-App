@@ -95,7 +95,8 @@ for (const kuri of kuris) {
       cycle_number: n,
       period_start: '2026-' + String(((n - 1) % 12) + 1).padStart(2, '0') + '-01',
       period_end: '2026-' + String(((n - 1) % 12) + 1).padStart(2, '0') + '-28',
-      status: 'UPCOMING'
+      status: 'UPCOMING',
+      target_status: n <= 8 ? 'COMPLETED' : 'UPCOMING'
     });
   }
 }
@@ -112,7 +113,7 @@ const installments = [];
 for (const membership of memberships) {
   for (const cycle of cyclesByKuri.get(membership.kuri_synthetic_id) ?? []) {
     const installmentIndex = installments.length + 1;
-    const paid = cycle.status === 'COMPLETED' ? 1000 : 0;
+    const paid = cycle.target_status === 'COMPLETED' ? 1000 : 0;
     installments.push({
       synthetic_id: id('installment', installmentIndex),
       membership_synthetic_id: membership.synthetic_id,
@@ -210,7 +211,7 @@ const monthlyWinners = [];
 const monthlyWinnerMemberships = [];
 const payouts = [];
 
-for (const cycle of cycles.filter(c => c.status === 'COMPLETED')) {
+for (const cycle of cycles.filter(c => c.target_status === 'COMPLETED')) {
   const kuriMemberships = memberships.filter(m => m.kuri_synthetic_id === cycle.kuri_synthetic_id);
   const drawNumber = drawSessions.length + 1;
   const draw = {
