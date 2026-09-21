@@ -311,10 +311,34 @@ for (const draw of draws) {
     SET status = 'RESULTS_READY', completed_at = '2026-08-20T10:02:00Z'
     WHERE id = ${drawId} AND status = 'DRAWING';`);
 }
-sql.push(...insertBatches('monthly_winners',
-  ['id','cycle_id','person_id','selection_source','finalized_by','finalized_at','status','notes'],
-  winners.map(w => [maps.winners.get(w.synthetic_id), idOf('cycles', w.cycle_synthetic_id), idOf('people', w.person_synthetic_id), sh('RANDOM_DRAW'), actorId, sh('2026-08-20T10:02:00Z'), sh('FINALIZED'), sh('Synthetic local load-test winner')])
-));
+// Winners require the related cycle to be DRAW_PENDING, and the draw must be RESULTS_READY.
+const winnersByCycle = new Map();
+for (const winner of winners) {
+  const rows = winnersByCycle.get(winner.cycle_synthetic_id) ?? [];
+  rows.push(winner);
+  winnersByCycle.set(winner.cycle_synthetic_id, rows);
+}
+for (const cycle of cycles.filter(c => c.status === 'COMPLETED')) {
+  const cycleId = idOf('cycles', cycle.synthetic_id);
+  sql.push(`UPDATE public.cycles
+    SET status = 'PAYMENT_CLOSED'
+    WHERE id = ${cycleId} AND status = 'COMPLETED';`);
+  sql.push(`UPDATE public.cycles
+    SET status = 'DRAW_PENDING'
+    WHERE id = ${cycleId} AND status = 'PAYMENT_CLOSED';`);
+
+  const cycleWinners = winnersByCycle.get(cycle.synthetic_id) ?? [];
+  if (cycleWinners.length) {
+    sql.push(...insertBatches('monthly_winners',
+      ['id','cycle_id','person_id','selection_source','finalized_by','finalized_at','status','notes'],
+      cycleWinners.map(w => [
+        maps.winners.get(w.synthetic_id), cycleId, idOf('people', w.person_synthetic_id),
+        sh('RANDOM_DRAW'), actorId, sh('2026-08-20T10:02:00Z'), sh('FINALIZED'),
+        sh('Synthetic local load-test winner')
+      ])
+    ));
+  }
+}
 sql.push(...insertBatches('monthly_winner_memberships',
   ['id','monthly_winner_id','membership_id','award_amount'],
   winnerMemberships.map(w => [maps.winnerMemberships.get(w.synthetic_id), idOf('winners', w.monthly_winner_synthetic_id), idOf('memberships', w.membership_synthetic_id), w.award_amount])
@@ -332,10 +356,6 @@ sql.push(...insertBatches('membership_exit_refund_transactions',
   refunds.map(r => [maps.refunds.get(r.synthetic_id), idOf('exits', r.membership_exit_synthetic_id), r.amount, sh(r.payment_method)])
 ));
 
-sql.push(...insertBatches('draw_selections',
-  ['id','draw_session_id','membership_id','selection_order','randomization_id'],
-  selections.map(s => [maps.selections.get(s.synthetic_id), idOf('draws', s.draw_synthetic_id), idOf('memberships', s.membership_synthetic_id), s.selection_order, sh('load-' + s.synthetic_id)])
-));
 sql.push('COMMIT;');
 
 console.log(`Preparing ${counts.people ?? people.length} people / generating SQL script for local Supabase...`);
