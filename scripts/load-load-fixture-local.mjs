@@ -110,10 +110,7 @@ function insertBatches(table, columns, rows, batchSize = 250) {
   return statements;
 }
 
-const sql = [];
-sql.push('BEGIN;');
-sql.push('DO 
-sql.push("SET LOCAL synchronous_commit = off;");
+const sql = [];\nsql.push('BEGIN;');\nsql.push('DO ' + '$$' + " BEGIN IF NOT EXISTS (SELECT 1 FROM public.users) THEN RAISE EXCEPTION 'No local public.users row exists. Run the local authenticated integration tests once before loading the fixture.'; END IF; END " + '$$' + ';');\nsql.push("SET LOCAL synchronous_commit = off;");
 sql.push("SET LOCAL statement_timeout = 0;");
 sql.push(`TRUNCATE TABLE public.audit_logs, public.membership_exit_refund_transactions, public.payouts, public.monthly_winner_memberships, public.monthly_winners, public.draw_selections, public.draw_pool_entries, public.draw_sessions, public.muppu_records, public.membership_exits, public.payment_allocations, public.payments, public.nominees, public.installments, public.memberships, public.cycles, public.kuris, public.person_emails, public.person_phones, public.people, public.organization_users, public.organizations CASCADE;`);
 
