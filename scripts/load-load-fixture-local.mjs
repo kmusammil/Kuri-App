@@ -321,9 +321,6 @@ for (const winner of winners) {
 for (const cycle of cycles.filter(c => c.status === 'COMPLETED')) {
   const cycleId = idOf('cycles', cycle.synthetic_id);
   sql.push(`UPDATE public.cycles
-    SET status = 'PAYMENT_CLOSED'
-    WHERE id = ${cycleId} AND status = 'COMPLETED';`);
-  sql.push(`UPDATE public.cycles
     SET status = 'DRAW_PENDING'
     WHERE id = ${cycleId} AND status = 'PAYMENT_CLOSED';`);
 
