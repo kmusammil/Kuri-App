@@ -350,7 +350,7 @@ const seedDir = path.join(process.cwd(), '.tmp', 'kuri-load-fixture-local');
 const seedPath = path.join(seedDir, 'seed.sql');
 fs.mkdirSync(seedDir, { recursive: true });
 
-fs.writeFileSync(seedPath, sql.join('\\n') + '\\n', 'utf8');
+fs.writeFileSync(seedPath, sql.join('\n') + '\n', 'utf8');
 
 console.log(`Prepared ${path.basename(seedPath)}. Mirrored ${fs.readdirSync(localMigrationsDir).length} canonical migrations. Loading via file-based psql in the local Supabase container...`);
 
