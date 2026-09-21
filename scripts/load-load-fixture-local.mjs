@@ -304,20 +304,37 @@ console.log(`Preparing ${fixture.target?.people ?? people.length} people / ${tot
 const started = Date.now();
 
 const localProjectDir = path.join(process.cwd(), 'supabase-local');
+const localSupabaseDir = path.join(localProjectDir, 'supabase');
+const canonicalMigrationsDir = path.join(process.cwd(), 'supabase', 'migrations');
+
 if (!fs.existsSync(localProjectDir) || !fs.statSync(localProjectDir).isDirectory()) {
   throw new Error('Local Supabase workspace not found. Expected ./supabase-local.');
+}
+if (!fs.existsSync(localSupabaseDir) || !fs.statSync(localSupabaseDir).isDirectory()) {
+  throw new Error('Local Supabase metadata directory not found. Expected ./supabase-local/supabase.');
+}
+if (!fs.existsSync(canonicalMigrationsDir) || !fs.statSync(canonicalMigrationsDir).isDirectory()) {
+  throw new Error('Canonical migrations directory not found. Expected ./supabase/migrations.');
+}
+
+const localMigrationsDir = path.join(localSupabaseDir, 'migrations');
+fs.rmSync(localMigrationsDir, { recursive: true, force: true });
+fs.mkdirSync(localMigrationsDir, { recursive: true });
+for (const name of fs.readdirSync(canonicalMigrationsDir)) {
+  const source = path.join(canonicalMigrationsDir, name);
+  if (fs.statSync(source).isFile() && name.endsWith('.sql')) {
+    fs.copyFileSync(source, path.join(localMigrationsDir, name));
+  }
 }
 
 const seedDir = path.join(process.cwd(), '.tmp', 'kuri-load-fixture-local');
 const seedPath = path.join(seedDir, 'seed.sql');
 fs.mkdirSync(seedDir, { recursive: true });
 
-// Write the generated SQL to disk. The Supabase CLI owns the database
-// connection and executes the seed file, avoiding custom Windows pipe handling.
 fs.writeFileSync(seedPath, sql.join('\n') + '\n', 'utf8');
 
-console.log(`Prepared ${path.basename(seedPath)}. Copying it to supabase-local/seed.sql for db reset...`);
-const projectSeedPath = path.join(localProjectDir, 'seed.sql');
+console.log(`Prepared ${path.basename(seedPath)}. Mirrored ${fs.readdirSync(localMigrationsDir).length} canonical migrations. Staging seed at supabase-local/supabase/seed.sql for db reset...`);
+const projectSeedPath = path.join(localSupabaseDir, 'seed.sql');
 const backupSeedPath = path.join(seedDir, 'seed.previous.sql');
 const hadExistingSeed = fs.existsSync(projectSeedPath);
 if (hadExistingSeed) fs.copyFileSync(projectSeedPath, backupSeedPath);
@@ -325,9 +342,14 @@ fs.copyFileSync(seedPath, projectSeedPath);
 
 function runCapture(command, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const isWindows = process.platform === 'win32';
+    const executable = isWindows ? (process.env.ComSpec || 'cmd.exe') : command;
+    const executableArgs = isWindows
+      ? ['/d', '/s', '/c', [command, ...args].map(String).join(' ')]
+      : args;
+    const child = spawn(executable, executableArgs, {
       cwd: process.cwd(),
-      shell: process.platform === 'win32',
+      shell: false,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
