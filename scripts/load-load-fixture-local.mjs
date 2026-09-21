@@ -52,7 +52,7 @@ const exits = fixture.membershipExits ?? [];
 const refunds = fixture.membershipExitRefundTransactions ?? [];
 
 const syntheticOrg = fixture.organization?.synthetic_id ?? 'organization-load-test';
-const actorId = '(SELECT id FROM public.users ORDER BY id LIMIT 1)';
+const actorId = "'00000000-0000-0000-0000-000000000099'";
 
 function sh(value) {
   return "'" + String(value ?? '').replaceAll("'", "''") + "'";
