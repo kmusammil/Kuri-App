@@ -62,7 +62,7 @@ const kuris = Array.from({ length: kuriCount }, (_, index) => {
     name: 'LOAD TEST KURI ' + String(n).padStart(2, '0'),
     description: 'Synthetic local-only load-test fixture',
     number_of_cycles: 12,
-    membership_limit: Math.max(1000, Math.ceil(peopleCount / kuriCount)),
+    membership_limit: Math.max(3000, Math.ceil((peopleCount * 2) / kuriCount)),
     installment_amount: 1000,
     gross_prize_amount: 100000,
     muppu_amount: 0
