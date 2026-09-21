@@ -298,13 +298,14 @@ WHERE NOT EXISTS (SELECT 1 FROM public.organizations WHERE id=${orgId});
 sql.push('COMMIT;');
 
 
-const marker = 'supabase-local';
+
 const docker = process.platform === 'win32' ? 'docker.exe' : 'docker';
+const marker = 'supabase-local';
 const dockerArgs = ['ps', '--format', '{{.Names}}'];
 
-function runCapture(command, args) {
+function runCapture(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, ...options });
     let stdout = '', stderr = '';
     child.stdout.on('data', d => stdout += d);
     child.stderr.on('data', d => stderr += d);
@@ -320,7 +321,7 @@ if (!dbContainer) {
 }
 
 const totalSqlChars = sql.reduce((sum, statement) => sum + statement.length + 1, 0);
-console.log(`Loading ${fixture.target?.people ?? people.length} people / ${totalSqlChars.toLocaleString()} SQL characters into ${dbContainer}...`);
+console.log(`Loading ${fixture.target?.people ?? people.length} people / ${totalSqlChars.toLocaleString()} SQL characters into local Postgres at 127.0.0.1:54322...`);
 const started = Date.now();
 
 const sqlTempPath = path.join(process.cwd(), '.tmp', 'kuri-load-fixture-local.sql');
@@ -328,46 +329,15 @@ fs.mkdirSync(path.dirname(sqlTempPath), { recursive: true });
 fs.writeFileSync(sqlTempPath, sql.join('\n') + '\n', 'utf8');
 
 try {
-  if (process.platform === 'win32') {
-    const script = [
-      '$ErrorActionPreference = "Stop"',
-      '$path=' + JSON.stringify(sqlTempPath),
-      '$container=' + JSON.stringify(dbContainer),
-      '$docker=' + JSON.stringify(docker),
-      '$reader=[System.IO.File]::OpenRead($path)',
-      '$proc=New-Object System.Diagnostics.Process',
-      '$proc.StartInfo.FileName=$docker',
-      '$proc.StartInfo.Arguments="exec -i $container psql -U postgres -d postgres -v ON_ERROR_STOP=1"',
-      '$proc.StartInfo.UseShellExecute=$false',
-      '$proc.StartInfo.RedirectStandardInput=$true',
-      '$proc.StartInfo.RedirectStandardError=$true',
-      '$proc.StartInfo.RedirectStandardOutput=$true',
-      '$proc.StartInfo.CreateNoWindow=$true',
-      '$proc.Start()',
-      '$reader.CopyTo($proc.StandardInput.BaseStream)',
-      '$proc.StandardInput.Close()',
-      '$err=$proc.StandardError.ReadToEnd()',
-      '$out=$proc.StandardOutput.ReadToEnd()',
-      '$proc.WaitForExit()',
-      'if ($proc.ExitCode -ne 0) { if ($err) { [Console]::Error.WriteLine($err) }; exit $proc.ExitCode }',
-      'if ($out) { [Console]::Write($out) }'
-    ].join('; ');
-    await runCapture('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script]);
-  } else {
-    const child = spawn(docker, ['exec', '-i', dbContainer, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1'], {
-      stdio: ['pipe', 'inherit', 'pipe'], windowsHide: true
-    });
-    let stderr = '';
-    child.stderr.on('data', d => stderr += d);
-    const input = fs.createReadStream(sqlTempPath);
-    await new Promise((resolve, reject) => {
-      let settled = false;
-      const fail = error => { if (settled) return; settled = true; input.destroy(); child.stdin.destroy(); reject(error); };
-      child.on('error', fail); child.stdin.on('error', fail); input.on('error', fail);
-      child.on('close', code => { if (settled) return; settled = true; code === 0 ? resolve() : reject(new Error(stderr || `psql exited with code ${code}`)); });
-      input.pipe(child.stdin);
-    });
-  }
+  // Supabase documents the local Postgres service on 127.0.0.1:54322.
+  // Use the host-installed psql client so Docker is not involved in the
+  // ~110 MB SQL transport at all.
+  const psql = process.platform === 'win32' ? 'psql.exe' : 'psql';
+  await runCapture(psql, [
+    'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
+    '-v', 'ON_ERROR_STOP=1',
+    '-f', sqlTempPath
+  ]);
 } finally {
   fs.rmSync(sqlTempPath, { force: true });
 }
@@ -376,6 +346,7 @@ console.log(JSON.stringify({
   loaded: fixture.counts,
   organization_id: orgId.replaceAll("'", ''),
   elapsed_seconds: Number(((Date.now() - started) / 1000).toFixed(3)),
-  target: 'local Supabase Docker only',
-  transport: process.platform === 'win32' ? 'PowerShell .NET FileStream -> docker stdin' : 'file stream -> docker exec stdin'
+  target: 'local Supabase Postgres only',
+  transport: 'host psql -f -> 127.0.0.1:54322'
 }, null, 2));
+
