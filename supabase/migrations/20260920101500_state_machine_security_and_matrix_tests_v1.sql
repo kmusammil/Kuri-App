@@ -7,8 +7,6 @@ revoke all on function public.enforce_payout_status_transition() from public;
 revoke all on function public.enforce_membership_status_transition() from public;
 revoke all on function public.enforce_membership_exit_status_transition() from public;
 
-alter table public._state_machine_context enable row level security;
-revoke all on table public._state_machine_context from anon, authenticated;
 
 do $$
 declare old_s text; new_s text; rejected boolean; expected_valid boolean;
