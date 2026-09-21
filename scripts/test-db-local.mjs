@@ -39,7 +39,7 @@ function run(command, args) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: root,
-      shell: false,
+      shell: process.platform === 'win32',
       windowsHide: true,
       stdio: 'inherit',
     });
@@ -52,7 +52,7 @@ function run(command, args) {
 }
 
 try {
-  await run(process.platform === 'win32' ? 'npx.cmd' : 'npx', [
+  await run('npx', [
     'supabase', 'test', 'db', '--workdir', 'supabase-local'
   ]);
 } finally {
