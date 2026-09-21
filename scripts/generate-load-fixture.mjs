@@ -192,15 +192,6 @@ for (let i = 0; i < memberships.length; i += 100) {
     status: 'SETTLED'
   };
   membershipExits.push(exit);
-  if (i % 200 === 0) {
-    membershipExitRefundTransactions.push({
-      synthetic_id: id('refund', membershipExitRefundTransactions.length + 1),
-      membership_exit_synthetic_id: exit.synthetic_id,
-      amount: 8000,
-      payment_method: 'BANK_TRANSFER'
-    });
-  }
-}
 
 // Completed cycles receive finalized synthetic draw/winner/payout records.
 for (const cycle of cycles.filter(c => c.status === 'COMPLETED')) {
