@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 /*
- * Run the canonical Kuri-App pgTAP suites against the isolated supabase-local stack.
- * The repository keeps the canonical tests under ./supabase/tests while the local
- * Supabase workspace is ./supabase-local. Tests are staged temporarily into the
- * workspace expected by the CLI and removed afterwards.
+ * Run the canonical Kuri-App pgTAP suites against the existing isolated supabase-local database.
+ * The local stack may have been loaded separately, so this runner stages only the
+ * test files and deliberately does not reset the database.
  */
 import fs from 'node:fs';
 import path from 'node:path';
