@@ -70,7 +70,7 @@ $$;
 create or replace function public.create_membership_for_admin(
   target_kuri_id uuid,
   target_person_id uuid,
-  membership_number text
+  target_membership_number text
 )
 returns uuid
 language plpgsql
@@ -80,7 +80,7 @@ as $$
 declare
   membership_id uuid;
   kuri_org_id uuid;
-  clean_number text := nullif(trim(membership_number), '');
+  clean_number text := nullif(trim(target_membership_number), '');
 begin
   if auth.uid() is null then
     raise exception 'You must be signed in.';
