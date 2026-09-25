@@ -147,3 +147,24 @@ The disposable authenticated end-to-end payout/Expense verification passed and r
 - `20260925140800_membership_succession_workflow_v1` — records nominee-based succession, preserves membership number/original person, and activates a separate current holder.
 - `20260925140900_current_holder_operational_integrations_v1` — routes payment, installment, membership-list, and draw identity resolution through the current holder after succession.
 - `20260925141000_membership_exit_idempotency_contract_fix_v1` — removes legacy short exit/death mutation overloads; canonical mutation APIs require explicit idempotency keys.
+
+
+## 2026-09-25 — Membership exit / death / succession reconciliation
+
+The production migration history contains the exit/death/succession work below. The repository now carries replayable reconciliation sources for the remote-only history plus the final hardening/integration migrations. Remote migration history was not rewritten.
+
+| Remote version | Repository migration |
+|---|---|
+| 20260925141453 | 20260925141453_20260925140500_membership_exit_death_succession_schema_v1 |
+| 20260925141621 | 20260925141621_20260925140620_membership_exit_financial_calculation_v2 |
+| 20260925142030 | 20260925142030_20260925140700_membership_exit_death_workflows_v1 |
+| 20260925142048 | 20260925142048_20260925140710_membership_exit_list_authority_v1 |
+| 20260925142341 | 20260925142341_20260925140800_membership_succession_workflow_v1 |
+| 20260925142608 | 20260925142608_membership_exit_death_succession_hardening_v1 |
+| 20260925142631 | 20260925142631_current_holder_operational_guard_reconciliation_v1 |
+| 20260925142715 | 20260925142715_exit_death_succession_operational_integration_v1 |
+| 20260925142737 | 20260925142737_20260925141000_membership_exit_idempotency_contract_fix_v1 |
+| 20260925142740 | 20260925142740_membership_exit_death_succession_privilege_fix_v1 |
+| 20260925143351 | 20260925143351_exit_death_succession_financial_authority_restore_v1 |
+
+The important final semantics are: a pending exit remains operational; approval is separate from settlement; exit/death mutations are idempotent; settlement uses the consolidated financial calculator; verified death is a separate immutable verification step; succession keeps the original member identity and membership number while moving the current holder to the registered nominee's linked successor; and draw/Expense/payment operations honor the resulting lifecycle.
