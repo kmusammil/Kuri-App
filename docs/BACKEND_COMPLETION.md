@@ -4,7 +4,7 @@ Date: 2026-09-25
 
 ## Status
 
-**Previous backend freeze (2026-09-22) is superseded by the Master Backend Improvement Ledger. Ledger-driven backend update is in progress.**
+**The 2026-09-22 freeze record is superseded by the Master Backend Improvement Ledger. Ledger-driven backend hardening remains in progress.**
 
 The database/API layer is now considered the backend contract for the application. New backend work should only be opened when frontend integration exposes a concrete defect or a genuinely new product requirement.
 
@@ -41,7 +41,7 @@ The database/API layer is now considered the backend contract for the applicatio
 
 - Public tables: 31
 - Public tables with RLS: 31
-- Authenticated SECURITY DEFINER application APIs: 85, intentionally exposed
+- Authenticated SECURITY DEFINER application APIs: 95, intentionally exposed
 - Anonymous SECURITY DEFINER APIs: 0
 - SECURITY DEFINER functions without fixed search_path: 0
 - Authenticated lifecycle transition RPCs: 3
@@ -110,3 +110,9 @@ During that verification two live defects were found and corrected: an actor-use
 A generalized Expense subsystem is now live as an additive financial layer: Kuri-scoped Expense Rules generate immutable per-member obligations, with `ONE_TIME` and `PER_CYCLE` frequencies and `UNPAID → PAID / WAIVED / DEDUCTED_FROM_PRIZE` settlement states. Completed/cancelled cycle history is excluded from new per-cycle obligations. Active membership creation, membership activation, and schedule generation synchronize active rules through internal helpers.
 
 The rollback-only live verification passed one-time and per-cycle obligation fan-out, terminal-cycle exclusion, paid/waived transitions, repeat-settlement rejection, rule deactivation/reactivation without duplication, cross-Kuri identity rejection, paid-payout deduction rejection, and audit coverage. The transaction was rolled back with zero Expense residue. Historical Muppu data remains untouched pending the later payout reconciliation migration.
+
+## 2026-09-25 payout Expense integration
+
+Generalized Expense deductions are now integrated into payout accounting as a dedicated `payouts.expense_deductions` component. The payout invariant is `max(gross - Muppu - Expense deductions - other deductions, 0)`. Prize deductions are allowed only against pending payouts for the same Kuri and person; payout preparation re-derives linked `DEDUCTED_FROM_PRIZE` obligations, and payout payment recalculates the same value before moving the payout to `PAID`.
+
+The live disposable end-to-end verification passed payout preparation, Expense prize deduction, re-preparation preservation, final net calculation with other deductions, same-key payout-payment replay, and same-key/different-payload rejection. The transaction was rolled back. Existing fixture payout state remains unchanged.
