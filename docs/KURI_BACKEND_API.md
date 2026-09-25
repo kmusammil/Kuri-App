@@ -6,7 +6,7 @@ Status: canonical API inventory for the current Supabase production database; up
 
 Client calls use Supabase Auth + PostgREST RPCs. Every client-facing mutation below is an authenticated application API operation. Authorization is enforced inside the function and is scoped to the target Kuri where the operation is Kuri-specific; organization context remains explicit for organization-level operations.
 
-Security-definer is intentional for the client-facing admin RPCs because these functions centralize privileged mutations and reads behind explicit authorization and validation. Supabase's advisor flags them because they are reachable by the authenticated role; that warning is treated as a reviewed, intentional API exposure. The live reviewed authenticated SECURITY DEFINER surface is now 77 functions.
+Security-definer is intentional for the client-facing admin RPCs because these functions centralize privileged mutations and reads behind explicit authorization and validation. Supabase's advisor flags them because they are reachable by the authenticated role; that warning is treated as a reviewed, intentional API exposure. The live reviewed authenticated SECURITY DEFINER surface is now 85 functions.
 
 Anonymous execution is disabled for all exposed security-definer RPCs.
 
@@ -63,7 +63,7 @@ Lifecycle state changes are exposed through the authenticated transition RPCs ab
 - get_payment_for_admin(uuid) -> record — authorizes through the payment's Kuri.
 - list_payments_for_admin(uuid) -> setof record — explicit Kuri scope.
 - allocate_payment_for_admin(uuid,uuid,bigint,text) -> bigint — payment/installment must belong to the same Kuri, cannot skip an earlier outstanding installment, and uses a required idempotency key.
-- allocate_payment_to_oldest_installments_for_admin(uuid,uuid,bigint,text) -> bigint — allocates a payment strictly oldest-first across the selected membership's outstanding installments, including advance payments spanning multiple future installments, with idempotent replay protection.
+- allocate_payment_to_oldest_installments_for_admin(uuid,uuid,bigint,text) -> bigint — allocates a payment strictly oldest-first across the selected membership's outstanding installments, including advance payments spanning multiple future installments, with idempotent replay protection; payment and membership installment rows are locked to serialize concurrent allocation attempts.
 - list_payment_allocations_for_admin(uuid) -> setof record — scoped to the payment's Kuri.
 - create_payment_correction_request_for_admin(uuid,bigint,timestamptz,payment_method,text,uuid,text,text) -> uuid — records a correction request without mutating the original payment.
 - create_payment_reversal_request_for_admin(uuid,bigint,uuid,text) -> uuid — records a full or partial reversal request; partial reversal of an allocated payment targets a specific allocation.
@@ -147,5 +147,6 @@ At the current 2026-09-25 ledger-update checkpoint:
 - existing Kuri records have Kuri-level MAIN_ADMIN recovery rows
 - payment admin APIs are now Kuri-scoped in migration `20260925080606_payment_kuri_authority_v1`
 - payment create/allocation retries are idempotent through `financial_idempotency_keys`
+- payment allocation invariant checks and a real parallel-session race test are maintained in the DB regression/integration suites
 
 Frontend clients should call this API through the Supabase client rather than writing directly to protected domain tables.
