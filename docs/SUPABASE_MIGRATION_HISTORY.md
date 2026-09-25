@@ -41,3 +41,12 @@ Two additional production migrations were applied and retained as the exact remo
 ## 2026-09-25 payment correction and reversal
 
 Migration `20260925082608_payment_correction_reversal_v1` was applied to the linked Supabase project and records the append-only payment correction/reversal workflow. The migration adds the adjustment request, correction snapshot, and reversal-entry ledgers; approval/rejection/execution APIs; effective payment/allocation reconciliation; and the corresponding Kuri-scoped API updates. The original payment and allocation rows are preserved.
+
+
+## 2026-09-25 payment allocation policy
+
+The linked production database contains two sequential allocation-policy migrations with the same descriptive name, retained as historical authority exactly as recorded remotely:
+- `20260925083209_payment_allocation_policy_v1` — first live allocation-policy implementation, including no-skip checking and an initial oldest-first advance allocator.
+- `20260925083456_payment_allocation_policy_v1` — follow-up live version that removes the earlier advance-allocator overload and makes the membership context explicit, preventing allocation across ambiguous historical memberships.
+
+No remote migration-history rows were rewritten. The repository preserves both applied versions under their exact remote versions.
