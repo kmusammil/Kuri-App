@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(33);
+select plan(38);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -455,6 +455,68 @@ select ok(
       and conname='payments_kuri_organization_fkey'
   ),
   'payment rows carry immutable Kuri tenancy'
+);
+
+
+-- 34-38: payment idempotency API contract
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.create_payment_for_admin(uuid,uuid,bigint,timestamptz,public.payment_method,text,text,text)'::regprocedure,
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.allocate_payment_for_admin(uuid,uuid,bigint,text)'::regprocedure,
+    'EXECUTE'
+  ),
+  'idempotent payment APIs are exposed to authenticated clients'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.create_payment_for_admin(uuid,uuid,bigint,timestamptz,public.payment_method,text,text,text)'::regprocedure,
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.allocate_payment_for_admin(uuid,uuid,bigint,text)'::regprocedure,
+    'EXECUTE'
+  ),
+  'anonymous clients cannot execute idempotent payment APIs'
+);
+
+select ok(
+  exists (
+    select 1 from pg_class
+    where oid='public.financial_idempotency_keys'::regclass
+      and relrowsecurity
+  )
+  and not has_table_privilege('authenticated','public.financial_idempotency_keys','SELECT'),
+  'financial idempotency ledger is internal and RLS protected'
+);
+
+select ok(
+  exists (
+    select 1 from pg_constraint
+    where conrelid='public.financial_idempotency_keys'::regclass
+      and conname='financial_idempotency_keys_actor_user_id_operation_type_idempotency_key_key'
+  ),
+  'idempotency key uniqueness is structurally enforced'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname in ('create_payment_for_admin','allocate_payment_for_admin')
+      and p.prosecdef
+      and has_function_privilege('authenticated',p.oid,'EXECUTE')
+      and p.proconfig is not null
+  ),
+  'idempotent payment functions retain SECURITY DEFINER with fixed configuration'
 );
 
 select * from finish();
