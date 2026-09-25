@@ -55,3 +55,12 @@ No remote migration-history rows were rewritten. The repository preserves both a
 ## 2026-09-25 payment allocation invariant and concurrency coverage
 
 The payment allocation policy is now accompanied by regression checks for the core financial invariants: effective allocations cannot exceed effective payment amount, and installment `amount_paid` reconciles to effective allocations capped by `amount_due`. The allocation APIs lock the payment and the selected membership's installments in deterministic cycle order. A dedicated authenticated integration test exercises two simultaneous allocation requests against the same payment; the test expects one request to serialize and succeed while the competing request observes the reduced remaining payment balance, followed by idempotent replay verification.
+
+
+## 2026-09-25 draw eligibility and winner hardening
+
+Two follow-up production migrations were applied and retained as historical authority:
+- `20260925084830_draw_eligibility_winner_hardening_v1` — moves draw authority to Kuri scope, makes draw-session creation race-safe, freezes eligibility once `POOL_READY` is reached, and enforces Kuri-level winner no-repeat/max-feasible-count rules during finalization.
+- `20260925085230_draw_eligibility_freeze_enforcement_v2` — changes random draw execution to consume the frozen `system_eligible` snapshot rather than recalculating live installment/member eligibility after `POOL_READY`.
+
+No remote migration-history rows were rewritten.
