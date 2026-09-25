@@ -1,10 +1,10 @@
 # Kuri-App Backend Completion
 
-Date: 2026-09-22
+Date: 2026-09-25
 
 ## Status
 
-**Backend implementation is complete and frozen for frontend development. Final audit verified on 2026-09-22.**
+**Previous backend freeze (2026-09-22) is superseded by the Master Backend Improvement Ledger. Ledger-driven backend update is in progress.**
 
 The database/API layer is now considered the backend contract for the application. New backend work should only be opened when frontend integration exposes a concrete defect or a genuinely new product requirement.
 
@@ -29,12 +29,14 @@ The database/API layer is now considered the backend contract for the applicatio
 - Positive authenticated workflow and concurrency coverage completed.
 - Disposable positive E2E fixtures cleaned from the test organization.
 - Canonical backend API documentation.
+- Explicit organization type/context foundation.
+- Kuri-scoped MAIN_ADMIN/ADMIN authority foundation.
 
 ## Final live verification
 
-- Public tables: 25
-- Public tables with RLS: 25
-- Authenticated SECURITY DEFINER application APIs: 65, intentionally exposed
+- Public tables: 26
+- Public tables with RLS: 26
+- Authenticated SECURITY DEFINER application APIs: 70, intentionally exposed
 - Anonymous SECURITY DEFINER APIs: 0
 - SECURITY DEFINER functions without fixed search_path: 0
 - Authenticated lifecycle transition RPCs: 3
@@ -61,4 +63,8 @@ Frontend clients should use the documented authenticated RPC/API surface and Sup
 
 The same backend can serve the web, Android, iOS, and desktop clients.
 
-**Backend freeze point: 2026-09-22. Frontend development can begin.**
+**Backend is not frozen. The 2026-09-22 freeze record is superseded by the active ledger-driven update.**
+
+## 2026-09-25 update checkpoint
+
+Migration `20260925072540_identity_organization_authority_v1` was applied to the production project and establishes explicit organization type/context plus Kuri-scoped admin authority. It is intentionally additive: existing organization/Kuri records were not rewritten or assigned invented historical authority. The invitation, expense, late-fee, notification, succession, and other ledger sections remain pending and are not represented as complete by this document.
