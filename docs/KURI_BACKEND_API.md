@@ -62,7 +62,8 @@ Lifecycle state changes are exposed through the authenticated transition RPCs ab
 - create_payment_for_admin(uuid,uuid,bigint,timestamptz,payment_method,text,text,text) -> uuid — explicit Kuri scope + person membership check + required idempotency key.
 - get_payment_for_admin(uuid) -> record — authorizes through the payment's Kuri.
 - list_payments_for_admin(uuid) -> setof record — explicit Kuri scope.
-- allocate_payment_for_admin(uuid,uuid,bigint,text) -> bigint — payment and installment must belong to the same Kuri + required idempotency key.
+- allocate_payment_for_admin(uuid,uuid,bigint,text) -> bigint — payment/installment must belong to the same Kuri, cannot skip an earlier outstanding installment, and uses a required idempotency key.
+- allocate_payment_to_oldest_installments_for_admin(uuid,uuid,bigint,text) -> bigint — allocates a payment strictly oldest-first across the selected membership's outstanding installments, including advance payments spanning multiple future installments, with idempotent replay protection.
 - list_payment_allocations_for_admin(uuid) -> setof record — scoped to the payment's Kuri.
 - create_payment_correction_request_for_admin(uuid,bigint,timestamptz,payment_method,text,uuid,text,text) -> uuid — records a correction request without mutating the original payment.
 - create_payment_reversal_request_for_admin(uuid,bigint,uuid,text) -> uuid — records a full or partial reversal request; partial reversal of an allocated payment targets a specific allocation.
@@ -140,7 +141,7 @@ The following classes are internal database implementation and must not be expos
 ## Verification snapshot
 
 At the current 2026-09-25 ledger-update checkpoint:
-- authenticated-callable security-definer functions: 84
+- authenticated-callable security-definer functions: 85
 - anonymous-callable security-definer functions: 0
 - authenticated-callable lifecycle transition RPCs: 3
 - existing Kuri records have Kuri-level MAIN_ADMIN recovery rows
