@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(65);
+select plan(75);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -753,6 +753,83 @@ select ok(
   not has_table_privilege('anon','public.financial_idempotency_keys','SELECT')
   and not has_table_privilege('authenticated','public.financial_idempotency_keys','SELECT'),
   'clients cannot directly read financial idempotency keys'
+);
+
+
+
+-- 66-75: payment correction/reversal structural contract
+select ok(
+  exists (select 1 from pg_type t join pg_namespace n on n.oid=t.typnamespace
+          where n.nspname='public' and t.typname='payment_adjustment_type'
+            and exists (select 1 from pg_enum e where e.enumtypid=t.oid and e.enumlabel='CORRECTION')
+            and exists (select 1 from pg_enum e where e.enumtypid=t.oid and e.enumlabel='REVERSAL'))
+  and exists (select 1 from pg_type t join pg_namespace n on n.oid=t.typnamespace
+          where n.nspname='public' and t.typname='payment_adjustment_status'
+            and exists (select 1 from pg_enum e where e.enumtypid=t.oid and e.enumlabel='REQUESTED')
+            and exists (select 1 from pg_enum e where e.enumtypid=t.oid and e.enumlabel='APPROVED')
+            and exists (select 1 from pg_enum e where e.enumtypid=t.oid and e.enumlabel='EXECUTED')
+            and exists (select 1 from pg_enum e where e.enumtypid=t.oid and e.enumlabel='REJECTED')),
+  'payment adjustment type and status vocabularies exist'
+);
+select ok(
+  (select count(*) from pg_class where oid in ('public.payment_adjustment_requests'::regclass,'public.payment_corrections'::regclass,'public.payment_reversal_entries'::regclass) and relrowsecurity)=3,
+  'payment adjustment ledgers have RLS enabled'
+);
+select ok(
+  not has_table_privilege('anon','public.payment_adjustment_requests','SELECT')
+  and not has_table_privilege('authenticated','public.payment_adjustment_requests','SELECT')
+  and not has_table_privilege('anon','public.payment_corrections','SELECT')
+  and not has_table_privilege('authenticated','public.payment_corrections','SELECT')
+  and not has_table_privilege('anon','public.payment_reversal_entries','SELECT')
+  and not has_table_privilege('authenticated','public.payment_reversal_entries','SELECT'),
+  'clients cannot directly read payment adjustment ledgers'
+);
+select is(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.prosecdef
+     and has_function_privilege('authenticated',p.oid,'EXECUTE')
+     and p.proname in ('create_payment_correction_request_for_admin','create_payment_reversal_request_for_admin','approve_payment_adjustment_request_for_admin','reject_payment_adjustment_request_for_admin','execute_payment_adjustment_request_for_admin','list_payment_adjustment_requests_for_admin','get_payment_adjustment_request_for_admin')),7::bigint,
+  'seven payment correction/reversal APIs are exposed to authenticated clients'
+);
+select is(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.prosecdef
+     and has_function_privilege('anon',p.oid,'EXECUTE')
+     and p.proname in ('create_payment_correction_request_for_admin','create_payment_reversal_request_for_admin','approve_payment_adjustment_request_for_admin','reject_payment_adjustment_request_for_admin','execute_payment_adjustment_request_for_admin','list_payment_adjustment_requests_for_admin','get_payment_adjustment_request_for_admin')),0::bigint,
+  'payment correction/reversal APIs are not anonymous-callable'
+);
+select ok(
+  not has_function_privilege('anon','public.get_effective_payment_amount(uuid)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('authenticated','public.get_effective_payment_amount(uuid)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.get_effective_payment_allocation_amount(uuid)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('authenticated','public.get_effective_payment_allocation_amount(uuid)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('authenticated','public.reconcile_installment_from_allocations(uuid)'::regprocedure,'EXECUTE'),
+  'effective financial helpers remain internal'
+);
+select ok(
+  exists (select 1 from pg_constraint where conrelid='public.payment_adjustment_requests'::regclass and pg_get_constraintdef(oid) ilike '%reason%')
+  and exists (select 1 from pg_constraint where conrelid='public.payment_adjustment_requests'::regclass and pg_get_constraintdef(oid) ilike '%REJECTED%')
+  and exists (select 1 from pg_constraint where conrelid='public.payment_reversal_entries'::regclass and conname='payment_reversal_entries_kuri_org_fkey'),
+  'adjustment reason/status and Kuri tenancy constraints exist'
+);
+select ok(
+  exists (select 1 from pg_constraint where conrelid='public.payment_corrections'::regclass and conname='payment_corrections_kuri_org_fkey')
+  and exists (select 1 from pg_index where indexrelid='public.payment_reversal_entries_one_unallocated_per_request'::regclass and indisunique),
+  'append-only correction/reversal structural invariants exist'
+);
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_payment_for_admin' and pg_get_functiondef(p.oid) ilike '%get_effective_payment_amount%')
+  and exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='list_payment_allocations_for_admin' and pg_get_functiondef(p.oid) ilike '%get_effective_payment_allocation_amount%'),
+  'payment read APIs expose effective financial values'
+);
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='reject_payment_adjustment_request_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%p_rejection_reason%')
+  and not exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='reject_payment_adjustment_request_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%btrim(rejection_reason)%'),
+  'payment rejection API uses unambiguous input parameter naming'
 );
 
 select * from finish();
