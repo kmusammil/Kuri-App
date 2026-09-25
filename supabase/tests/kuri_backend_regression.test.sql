@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(34);
+select plan(40);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -25,7 +25,7 @@ select ok(
   (select count(*) from pg_class c
    join pg_namespace n on n.oid=c.relnamespace
    where n.nspname='public' and c.relkind='r'),
-  'all 25 public tables have RLS enabled'
+  'all public tables have RLS enabled'
 );
 
 select ok(
@@ -46,6 +46,62 @@ select ok(
       and conname='muppu_records_kuri_cycle_person_key'
   ),
   'muppu uniqueness invariant exists'
+);
+
+-- 5-10: explicit organization/Kuri authority foundation
+select ok(
+  exists (
+    select 1 from pg_type t
+    join pg_namespace n on n.oid=t.typnamespace
+    where n.nspname='public'
+      and t.typname='organization_type'
+      and exists (select 1 from pg_enum e where e.enumtypid=t.oid and e.enumlabel='PERSONAL')
+      and exists (select 1 from pg_enum e where e.enumtypid=t.oid and e.enumlabel='ORGANIZATION')
+  ),
+  'organization type vocabulary exists'
+);
+
+select ok(
+  exists (select 1 from information_schema.columns where table_schema='public' and table_name='organizations' and column_name='org_type')
+  and exists (select 1 from information_schema.columns where table_schema='public' and table_name='organizations' and column_name='created_by')
+  and exists (select 1 from information_schema.columns where table_schema='public' and table_name='kuris' and column_name='created_by'),
+  'organization and Kuri creator metadata exists'
+);
+
+select ok(
+  exists (
+    select 1 from pg_class c
+    join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='public' and c.relname='kuri_admins' and c.relrowsecurity
+  ),
+  'kuri_admins exists with RLS'
+);
+
+select ok(
+  exists (
+    select 1 from pg_index
+    where indexrelid='public.kuri_admins_one_main_admin_key'::regclass
+      and indisunique
+  ),
+  'one Main Admin per Kuri is structurally constrained'
+);
+
+select ok(
+  has_function_privilege('authenticated','public.create_kuri_for_organization_admin(uuid,text,text,date,integer,integer,bigint,integer,integer,bigint,bigint,text,refund_policy)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.create_kuri_for_organization_admin(uuid,text,text,date,integer,integer,bigint,integer,integer,bigint,bigint,text,refund_policy)'::regprocedure,'EXECUTE'),
+  'explicit organization-scoped Kuri creation is authenticated-only'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='list_my_organizations'
+      and has_function_privilege('authenticated',p.oid,'EXECUTE')
+      and not has_function_privilege('anon',p.oid,'EXECUTE')
+  ),
+  'explicit organization listing API is authenticated-only'
 );
 
 -- 5-8: domain identity immutability triggers exist on critical tenant keys
