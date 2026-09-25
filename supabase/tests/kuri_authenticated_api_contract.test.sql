@@ -43,7 +43,7 @@ select is(
   'anon cannot execute public SECURITY DEFINER functions'
 );
 
--- 3. The reviewed authenticated SECURITY DEFINER API surface is currently 84.
+-- 3. The reviewed authenticated SECURITY DEFINER API surface is currently 85.
 -- Internal state-machine trigger helpers are deliberately excluded from the
 -- client-facing SECURITY DEFINER API boundary. The 84 count includes the
 -- intentionally exposed invitation/join-request and payment adjustment APIs.
@@ -54,7 +54,7 @@ select is(
    where n.nspname = 'public'
      and p.prosecdef
      and has_function_privilege('authenticated', p.oid, 'EXECUTE')),
-  77::bigint,
+  85::bigint,
   'authenticated SECURITY DEFINER API surface includes the reviewed APIs plus invitation and join-request APIs'
 );
 
