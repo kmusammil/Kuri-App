@@ -103,12 +103,12 @@ Lifecycle state changes are exposed through the authenticated transition RPCs ab
 - deduct_muppu_from_prize_for_admin(uuid,text) -> void
 
 ### Membership exits and settlements
-- create_membership_exit_for_admin(uuid,settlement_reason,date,refund_policy,bigint,text) -> uuid
+- create_membership_exit_for_admin(uuid,settlement_reason,date,refund_policy,bigint,text,text) -> uuid — explicit idempotency key
 - approve_membership_exit_for_admin(uuid) -> void
 - refresh_membership_exit_financials_for_admin(uuid) -> void
-- record_membership_exit_refund_for_admin(uuid,bigint,payment_method,timestamptz,text) -> uuid
-- settle_membership_exit_for_admin(uuid,muppu_settlement_method,text,timestamptz) -> void
-- record_death_settlement_for_admin(uuid,uuid,text) -> void
+- record_membership_exit_refund_for_admin(uuid,bigint,payment_method,text,timestamptz,text,text) -> uuid — explicit idempotency key
+- settle_membership_exit_for_admin(uuid,muppu_settlement_method,text,timestamptz,text) -> void — explicit idempotency key
+- record_death_settlement_for_admin(uuid,uuid,text,text) -> void — explicit idempotency key
 - get_membership_exit_membership_id_for_admin(uuid) -> uuid
 - list_membership_exits_for_admin(uuid) -> setof record
 - get_membership_exit_reconciliation_for_admin(uuid) -> setof record
@@ -181,7 +181,7 @@ Payout net amount is constrained as `max(gross_amount - muppu_amount - expense_d
 
 ## Membership exit, death settlement, and succession
 
-Exit lifecycle: `ACTIVE/SUSPENDED -> PENDING -> APPROVED -> SETTLED -> EXITED`. Creating an exit request does not make the membership exited; pending members remain operational. Cancellation preserves the historical exit row and allows a later request. Exit settlement recalculates financials from effective payment/allocation values.
+Exit lifecycle: `ACTIVE/SUSPENDED -> PENDING -> APPROVED -> SETTLED -> EXITED`. A `PENDING` exit does not change membership status or remove the member from ordinary operations; cancellation preserves the historical exit request. Creating an exit request does not make the membership exited; pending members remain operational. Cancellation preserves the historical exit row and allows a later request. Exit settlement recalculates financials from `calculate_membership_exit_financials`, using effective payment/allocation values and the ledger’s pre-win/post-win, Expense, Muppu and request/death cutoff rules.
 
 Canonical mutation APIs:
 - `create_membership_exit_for_admin(membership_id, reason, exit_date, refund_policy, refund_amount, notes, idempotency_key)`
@@ -193,6 +193,6 @@ Canonical mutation APIs:
 - `record_death_settlement_for_admin(exit_id, nominee_id, settlement_notes, idempotency_key)`
 - `create_membership_succession_for_admin(exit_id, nominee_id, succession_notes)`
 
-Death settlement requires a verified death date and a nominee registered to the original member. Payments after the verified death date are excluded from the death settlement path. Succession is append-only: the original `person_id` and membership number remain unchanged; `current_holder_person_id` identifies the successor for ongoing operations.
+Death settlement requires a verified death date and a nominee registered to the original member. Payments, draws and other post-death operations are blocked from the death settlement path once the death is verified. Succession is append-only: the original `person_id` and membership number remain unchanged; `current_holder_person_id` identifies the successor for ongoing operations.
 
 Operational APIs use `coalesce(current_holder_person_id, person_id)` after succession, so successor payments/installments/draw identity follow the current holder while historical membership identity remains intact.
