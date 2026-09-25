@@ -40,10 +40,10 @@ The RLS/security helpers has_org_role(uuid, app_role[]) and is_org_member(uuid) 
 - create_kuri_for_organization_admin(uuid,text,text,date,integer,integer,bigint,integer,integer,bigint,bigint,text,refund_policy) -> uuid — explicit organization-scoped Kuri creation.
 - get_kuri_for_admin(uuid) -> record
 - list_kuris_for_admin() -> setof record
-- generate_cycles_for_admin(uuid) -> integer
-- generate_kuri_schedule_for_admin(uuid) -> integer
-- get_cycle_for_admin(uuid) -> record
-- list_cycles_for_admin(uuid) -> setof record
+- generate_cycles_for_admin(uuid) -> integer — Kuri-scoped schedule generation; existing `COMPLETED`/`CANCELLED` cycle dates are not rewritten.
+- generate_kuri_schedule_for_admin(uuid) -> integer — Kuri-scoped schedule generation; existing cycle rows are preserved.
+- get_cycle_for_admin(uuid) -> record — Kuri-scoped cycle read.
+- list_cycles_for_admin(uuid) -> setof record — Kuri-scoped cycle list.
 
 Lifecycle state changes are exposed through the authenticated transition RPCs above; clients must not write status columns directly.
 
@@ -129,6 +129,7 @@ Administrative RPCs must enforce:
 7. Draw operations enforce Kuri/cycle/draw consistency and winner-selection invariants.
 8. Security-definer functions use a fixed search path.
 9. Draw eligibility is frozen at `POOL_READY`; winner finalization serializes within the Kuri so no-repeat cannot be bypassed by concurrent finalizers.
+10. Cycle generation and status transitions are Kuri-scoped and lock the Kuri/cycle rows; terminal (`COMPLETED`/`CANCELLED`) cycle dates are not overwritten by regeneration.
 
 ## Non-API functions
 
@@ -150,6 +151,7 @@ At the current 2026-09-25 ledger-update checkpoint:
 - payment create/allocation retries are idempotent through `financial_idempotency_keys`
 - draw preparation/finalization now have explicit race-safety and winner-invariant coverage; draw eligibility is snapshot-frozen at `POOL_READY`
 - payout preparation/payment now use Kuri-scoped authority, row locking, and `financial_idempotency_keys` for payout-payment replay protection
+- cycle generation/reads/transitions now use Kuri authority, row locking, and terminal-cycle schedule immutability
 - payment allocation invariant checks and a real parallel-session race test are maintained in the DB regression/integration suites
 
 Frontend clients should call this API through the Supabase client rather than writing directly to protected domain tables.
