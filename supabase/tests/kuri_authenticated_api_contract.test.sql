@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(48);
+select plan(56);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -578,6 +578,53 @@ select ok(
      and p.proname in ('create_payment_correction_request_for_admin','create_payment_reversal_request_for_admin','approve_payment_adjustment_request_for_admin','reject_payment_adjustment_request_for_admin','execute_payment_adjustment_request_for_admin','list_payment_adjustment_requests_for_admin','get_payment_adjustment_request_for_admin')
      and (p.proconfig is null or not exists(select 1 from unnest(p.proconfig) cfg where cfg='search_path=public'))) = 0,
   'payment adjustment APIs retain fixed search_path'
+);
+
+
+-- 49-56: oldest-first and advance-payment allocation contract
+select ok(
+  has_function_privilege('authenticated','public.allocate_payment_to_oldest_installments_for_admin(uuid,uuid,bigint,text)'::regprocedure,'EXECUTE'),
+  'oldest-first advance allocation API is authenticated-callable'
+);
+select ok(
+  not has_function_privilege('anon','public.allocate_payment_to_oldest_installments_for_admin(uuid,uuid,bigint,text)'::regprocedure,'EXECUTE'),
+  'oldest-first advance allocation API is not anonymous-callable'
+);
+select ok(
+  to_regprocedure('public.allocate_payment_to_oldest_installments_for_admin(uuid,bigint,text)') is null,
+  'stale advance allocation API overload is absent'
+);
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='allocate_payment_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%Cannot skip outstanding earlier installments%'),
+  'targeted allocation API enforces no-skipping'
+);
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='allocate_payment_to_oldest_installments_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%target_membership_id%'
+            and pg_get_functiondef(p.oid) ilike '%Payment person does not match membership person%'),
+  'advance allocation is membership-scoped'
+);
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='allocate_payment_to_oldest_installments_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%ORDER BY oc.cycle_number,oi.id%'),
+  'advance allocation orders installments oldest-first'
+);
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='allocate_payment_to_oldest_installments_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%financial_idempotency_keys%'),
+  'advance allocation is idempotency-protected'
+);
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.prosecdef and has_function_privilege('authenticated',p.oid,'EXECUTE')
+     and p.proname in ('allocate_payment_for_admin','allocate_payment_to_oldest_installments_for_admin')
+     and (p.proconfig is null or not exists(select 1 from unnest(p.proconfig) cfg where cfg='search_path=public'))) = 0,
+  'payment allocation APIs retain fixed search_path'
 );
 
 select * from finish();
