@@ -101,7 +101,7 @@ describe('Kuri-App authenticated API boundary', () => {
       target_person_id: env('TEST_PERSON_B_ID'), payment_amount: 1, payment_date: new Date().toISOString(),
       payment_method: 'OTHER', payment_reference: 'AUTH-INTEGRATION-CROSS-TENANT',
       payment_notes: 'Must be rejected by tenancy boundary.',
-      idempotency_key: 'AUTH-CROSS-TENANT-PAYMENT'
+      p_idempotency_key: 'AUTH-CROSS-TENANT-PAYMENT'
     })
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
@@ -112,7 +112,7 @@ describe('Kuri-App authenticated API boundary', () => {
       target_person_id: env('TEST_PERSON_A_ID'), payment_amount: 1, payment_date: new Date().toISOString(),
       payment_method: 'OTHER', payment_reference: 'AUTH-INTEGRATION-ANON',
       payment_notes: 'Must be rejected without JWT.',
-      idempotency_key: 'AUTH-ANON-PAYMENT'
+      p_idempotency_key: 'AUTH-ANON-PAYMENT'
     })
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
@@ -184,12 +184,12 @@ describe('Kuri-App authenticated API boundary', () => {
       rpc(adminA, 'create_payment_for_admin', {
         target_person_id: env('TEST_PERSON_A_ID'), payment_amount: 0, payment_date: new Date().toISOString(),
         payment_method: 'OTHER', payment_reference: 'AUTH-NONPOSITIVE-0', payment_notes: 'Must be rejected.',
-        target_kuri_id: env('TEST_KURI_A_ID'), idempotency_key: 'AUTH-NONPOSITIVE-0-KEY'
+        target_kuri_id: env('TEST_KURI_A_ID'), p_idempotency_key: 'AUTH-NONPOSITIVE-0-KEY'
       }),
       rpc(adminA, 'create_payment_for_admin', {
         target_person_id: env('TEST_PERSON_A_ID'), payment_amount: -1, payment_date: new Date().toISOString(),
         payment_method: 'OTHER', payment_reference: 'AUTH-NONPOSITIVE-NEG', payment_notes: 'Must be rejected.',
-        target_kuri_id: env('TEST_KURI_A_ID'), idempotency_key: 'AUTH-NONPOSITIVE-NEG-KEY'
+        target_kuri_id: env('TEST_KURI_A_ID'), p_idempotency_key: 'AUTH-NONPOSITIVE-NEG-KEY'
       }),
     ])
     for (const result of results) { expect(result.data).toBeNull(); expect(result.error).not.toBeNull() }
@@ -200,7 +200,7 @@ describe('Kuri-App authenticated API boundary', () => {
       target_payment_id: '00000000-0000-0000-0000-000000000001',
       target_installment_id: '00000000-0000-0000-0000-000000000002',
       allocation_amount: 1,
-      idempotency_key: 'AUTH-UNKNOWN-ALLOCATION',
+      p_idempotency_key: 'AUTH-UNKNOWN-ALLOCATION',
     })
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
