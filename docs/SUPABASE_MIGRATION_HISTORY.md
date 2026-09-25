@@ -64,3 +64,16 @@ Two follow-up production migrations were applied and retained as historical auth
 - `20260925085230_draw_eligibility_freeze_enforcement_v2` — changes random draw execution to consume the frozen `system_eligible` snapshot rather than recalculating live installment/member eligibility after `POOL_READY`.
 
 No remote migration-history rows were rewritten.
+
+
+## 2026-09-25 draw read-authority hardening
+
+Migration `20260925090000_draw_read_api_kuri_authority_v1` moves the remaining draw read APIs (`get_draw_session_for_admin`, `get_draw_selections_for_admin`, `list_draw_pool_for_admin`, and `get_monthly_winners_for_admin`) to Kuri-scoped authorization. Anonymous execution remains disabled and authenticated execution remains the intended API surface.
+
+## 2026-09-25 legacy Kuri-creation defect repair
+
+Two follow-up migrations were applied and retained as historical authority:
+- `20260925085600_create_kuri_for_admin_uuid_aggregate_fix_v1` — first repair attempt for the legacy `create_kuri_for_admin` organization lookup; it replaced the unsupported `min(uuid)` aggregate with distinct-organization counting, but its first version contained a parameter-name defect.
+- `20260925085830_create_kuri_for_admin_uuid_aggregate_fix_v2` — immediate correction of the repair function's parameter reference. The current function now passes a rollback-only invocation test.
+
+These migrations are preserved exactly rather than rewriting or deleting the remote history.
