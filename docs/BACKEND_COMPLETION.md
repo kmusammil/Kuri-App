@@ -16,6 +16,7 @@ The database/API layer is now considered the backend contract for the applicatio
 - SECURITY DEFINER functions reviewed and hardened with fixed search paths.
 - Kuri, cycle, draw, membership, exit, payout, and settlement state machines.
 - Draw eligibility snapshot freeze, winner no-repeat/max-feasible-count invariants, and membership invariants.
+- Payout Kuri-scoped authority, payout row-locking, and payout-payment idempotency/replay protection.
 - Draw and payout concurrency protection.
 - Payment and installment allocation integrity currently has clean live data; payment creation/allocation now have authenticated idempotency/replay protection; payment correction/reversal is append-only and approval-gated; allocation now enforces no-skipping and supports deterministic oldest-first advance-payment allocation; allocation financial invariants and authenticated concurrent-race coverage are now maintained in the regression/integration test suites.
 - Payout and Muppu accounting invariants.
@@ -76,3 +77,8 @@ Migration `20260925072540_identity_organization_authority_v1` was applied to the
 ## 2026-09-25 draw hardening update
 
 The live draw surface now uses Kuri-scoped authority for draw state, preparation, pool overrides, random draw, and winner finalization. Draw preparation is idempotent after `POOL_READY`, so the eligibility snapshot cannot be silently recomputed. Random draw execution consumes the frozen `system_eligible` snapshot. Winner finalization serializes on the Kuri row and enforces distinct-person winners, no-repeat winners within the Kuri, and the ledger formula `Maximum winners = M - (C - 1)`. Regression and authenticated integration coverage has been added for these invariants and for concurrent draw preparation/finalization.
+
+
+## 2026-09-25 payout hardening update
+
+The payout surface now uses Kuri-scoped authority for preparation, status transitions, reads, and payout payment processing. `mark_payout_paid_for_admin` requires an idempotency key and binds the complete payout request to `financial_idempotency_keys`; a completed retry is a no-op and a reused key with a different payload is rejected. The integration suite includes authenticated concurrent payout preparation and same-key payment replay coverage.
