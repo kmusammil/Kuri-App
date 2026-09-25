@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(103);
+select plan(108);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -1082,6 +1082,62 @@ select ok(
   exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='create_membership_for_admin' and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_membership%')
   and exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='generate_cycles_for_admin' and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_kuri%'),
   'Enrollment and cycle generation synchronize Expense obligations'
+);
+
+-- 104-108: Muppu Kuri authority contract
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_muppu_record_for_admin','list_muppu_records_for_admin',
+       'mark_muppu_paid_for_admin','waive_muppu_for_admin',
+       'deduct_muppu_from_prize_for_admin'
+     )
+     and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'
+     and pg_get_functiondef(p.oid) not ilike '%organization_users%')=5,
+  'Muppu APIs use Kuri authority instead of direct organization authority'
+);
+
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_muppu_record_for_admin','list_muppu_records_for_admin',
+       'mark_muppu_paid_for_admin','waive_muppu_for_admin',
+       'deduct_muppu_from_prize_for_admin'
+     )
+     and has_function_privilege('authenticated',p.oid,'EXECUTE')
+     and not has_function_privilege('anon',p.oid,'EXECUTE'))=5,
+  'Muppu APIs are authenticated-only'
+);
+
+select ok(
+  exists(
+    select 1 from pg_trigger
+    where tgrelid='public.muppu_records'::regclass
+      and tgname='muppu_records_identity_guard'
+  ),
+  'Muppu identity guard trigger is part of the authenticated API contract'
+);
+
+select ok(
+  exists(
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='deduct_muppu_from_prize_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%payout processing has started%'
+  ),
+  'Muppu prize deduction cannot occur after payout processing starts'
+);
+
+select ok(
+  exists(
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='create_muppu_record_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%Person does not belong to this Kuri%'
+  ),
+  'Muppu creation enforces target-Kuri membership'
 );
 
 -- 102-105: generalized Expense payout contract
