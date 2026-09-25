@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(121);
+select plan(134);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -1274,5 +1274,141 @@ select ok(
   'succession writer uses a fixed search_path'
 );
 
+
+-- 122-134: membership exit, death and succession authenticated API contract
+select ok(
+  has_function_privilege('authenticated','public.create_membership_exit_for_admin(uuid,public.settlement_reason,date,public.refund_policy,bigint,text,text)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.create_membership_exit_for_admin(uuid,public.settlement_reason,date,public.refund_policy,bigint,text,text)'::regprocedure,'EXECUTE'),
+  'exit creation is authenticated-only and requires idempotency'
+);
+
+select ok(
+  has_function_privilege('authenticated','public.record_membership_exit_refund_for_admin(uuid,bigint,public.payment_method,text,timestamptz,text,text)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.record_membership_exit_refund_for_admin(uuid,bigint,public.payment_method,text,timestamptz,text,text)'::regprocedure,'EXECUTE'),
+  'exit refund recording is authenticated-only and idempotent'
+);
+
+select ok(
+  has_function_privilege('authenticated','public.settle_membership_exit_for_admin(uuid,public.muppu_settlement_method,text,timestamptz,text)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.settle_membership_exit_for_admin(uuid,public.muppu_settlement_method,text,timestamptz,text)'::regprocedure,'EXECUTE')
+  and has_function_privilege('authenticated','public.record_death_settlement_for_admin(uuid,uuid,text,text)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.record_death_settlement_for_admin(uuid,uuid,text,text)'::regprocedure,'EXECUTE'),
+  'exit and death settlement mutations are authenticated-only and idempotent'
+);
+
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_membership_exit_for_admin','list_membership_exits_for_admin',
+       'get_membership_exit_membership_id_for_admin','get_membership_exit_reconciliation_for_admin',
+       'approve_membership_exit_for_admin','transition_membership_exit_status_for_admin',
+       'record_membership_exit_refund_for_admin','verify_death_date_for_admin',
+       'get_death_settlement_context_for_admin','record_death_settlement_for_admin',
+       'settle_membership_exit_for_admin','create_nominee_for_admin',
+       'update_nominee_for_admin','delete_nominee_for_admin','list_nominees_for_admin',
+       'get_membership_nominees_for_admin','link_nominee_to_successor_person_for_admin',
+       'record_membership_succession_for_admin'
+     )
+     and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%')=18,
+  'all exit/death/nominee/succession APIs are Kuri-scoped'
+);
+
+select is(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_membership_exit_for_admin','list_membership_exits_for_admin',
+       'get_membership_exit_membership_id_for_admin','get_membership_exit_reconciliation_for_admin',
+       'approve_membership_exit_for_admin','transition_membership_exit_status_for_admin',
+       'record_membership_exit_refund_for_admin','verify_death_date_for_admin',
+       'get_death_settlement_context_for_admin','record_death_settlement_for_admin',
+       'settle_membership_exit_for_admin','create_nominee_for_admin',
+       'update_nominee_for_admin','delete_nominee_for_admin','list_nominees_for_admin',
+       'get_membership_nominees_for_admin','link_nominee_to_successor_person_for_admin',
+       'record_membership_succession_for_admin'
+     )
+     and pg_get_functiondef(p.oid) ilike '%organization_users%'),0::bigint,
+  'exit/death/nominee/succession APIs do not directly authorize through organization_users'
+);
+
+select is(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_membership_exit_for_admin','record_membership_exit_refund_for_admin',
+       'verify_death_date_for_admin','record_death_settlement_for_admin',
+       'settle_membership_exit_for_admin','link_nominee_to_successor_person_for_admin',
+       'record_membership_succession_for_admin'
+     )
+     and p.proconfig @> ARRAY['search_path=public']),0::bigint,
+  'exit/death/succession SECURITY DEFINER mutations use fixed empty search_path'
+);
+
+select ok(
+  to_regprocedure('public.create_membership_exit_for_admin(uuid,public.settlement_reason,date,public.refund_policy,bigint,text)') is null
+  and to_regprocedure('public.record_membership_exit_refund_for_admin(uuid,bigint,public.payment_method,text,timestamptz,text)') is null
+  and to_regprocedure('public.settle_membership_exit_for_admin(uuid,public.muppu_settlement_method,text,timestamptz)') is null
+  and to_regprocedure('public.record_death_settlement_for_admin(uuid,uuid,text)') is null,
+  'legacy non-idempotent exit/death signatures are removed'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='calculate_membership_exit_financials'
+           and pg_get_functiondef(p.oid) ilike '%pending_prize_amount%'
+           and pg_get_functiondef(p.oid) ilike '%outstanding_installment_amount%'),
+  'exit financial calculation exposes prize and remaining-installment components'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='create_membership_exit_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%calculate_membership_exit_financials%'
+           and pg_get_functiondef(p.oid) ilike '%PENDING%'),
+  'exit requests are recorded as pending and calculated from the financial calculator'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='verify_death_date_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%death_date_verified_at%'
+           and pg_get_functiondef(p.oid) ilike '%immutable%')
+  or exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='verify_death_date_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%cannot be changed%'),
+  'death verification is immutable after recording'
+);
+
+select ok(
+  to_regclass('public.membership_successions') is not null
+  and (select relrowsecurity from pg_class where oid='public.membership_successions'::regclass),
+  'membership succession ledger is protected by RLS'
+);
+
+select ok(
+  exists(select 1 from pg_index where indexrelid='public.membership_successions_one_per_membership'::regclass and indisunique)
+  and exists(select 1 from pg_trigger where tgrelid='public.memberships'::regclass and tgname='membership_current_holder_identity_guard'),
+  'succession preserves one succession per membership and protects current holder identity'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='record_membership_succession_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%death_date_verified_at%'
+           and pg_get_functiondef(p.oid) ilike '%successor_person_id%'
+           and pg_get_functiondef(p.oid) ilike '%settled%'),
+  'succession requires a verified settled death and a linked successor'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='prepare_draw_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%death_date_verified_at%')
+  and exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='sync_expense_obligations_for_membership'
+           and pg_get_functiondef(p.oid) ilike '%membership_exits%'),
+  'death/exit state participates in draw and Expense operational boundaries'
+);
 select * from finish();
 rollback;
