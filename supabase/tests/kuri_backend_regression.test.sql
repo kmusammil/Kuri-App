@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(40);
+select plan(44);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -139,6 +139,61 @@ select ok(
       and tgname like '%domain%identity%'
   ),
   'membership identity immutability trigger exists'
+);
+
+-- 9-12: invitation/join-request structural invariants
+select ok(
+  exists (
+    select 1 from pg_class c
+    where c.oid='public.kuri_invitations'::regclass
+      and c.relrowsecurity
+  )
+  and exists (
+    select 1 from pg_class c
+    where c.oid='public.kuri_join_requests'::regclass
+      and c.relrowsecurity
+  ),
+  'invitation and join-request tables have RLS'
+);
+
+select ok(
+  exists (
+    select 1 from pg_constraint
+    where conrelid='public.kuri_invitations'::regclass
+      and conname='kuri_invitations_code_hash_key'
+  ),
+  'invitation code hashes are unique'
+);
+
+select ok(
+  exists (
+    select 1 from pg_index
+    where indexrelid='public.kuri_join_requests_one_pending_key'::regclass
+      and indisunique
+  ),
+  'only one pending join request per applicant and Kuri is enforced'
+);
+
+select is(
+  (select count(*)
+   from pg_proc p
+   join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_kuri_invitation_for_admin',
+       'revoke_kuri_invitation_for_admin',
+       'accept_kuri_invitation',
+       'list_kuri_join_requests_for_admin',
+       'list_kuri_invitations_for_admin',
+       'approve_kuri_join_request_for_admin',
+       'reject_kuri_join_request_for_admin'
+     )
+     and p.prosecdef
+     and has_function_privilege('authenticated',p.oid,'EXECUTE')
+     and has_function_privilege('anon',p.oid,'EXECUTE')
+  ),
+  0::bigint,
+  'invitation/join-request SECURITY DEFINER APIs are not anonymous-callable'
 );
 
 -- 9-14: state machine transition matrices using isolated temp tables
