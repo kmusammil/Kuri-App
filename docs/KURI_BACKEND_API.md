@@ -4,7 +4,7 @@ Status: canonical API inventory for the current Supabase production database; up
 
 ## Exposure model
 
-Client calls use Supabase Auth + PostgREST RPCs. Every client-facing mutation below is an authenticated application API operation. Authorization is enforced inside the function and is tenant-scoped to the caller's organization.
+Client calls use Supabase Auth + PostgREST RPCs. Every client-facing mutation below is an authenticated application API operation. Authorization is enforced inside the function and is scoped to the target Kuri where the operation is Kuri-specific; organization context remains explicit for organization-level operations.
 
 Security-definer is intentional for the client-facing admin RPCs because these functions centralize privileged mutations and reads behind explicit authorization and validation. Supabase's advisor flags them because they are reachable by the authenticated role; that warning is treated as a reviewed, intentional API exposure. The live reviewed authenticated SECURITY DEFINER surface is now 77 functions.
 
@@ -59,14 +59,14 @@ Lifecycle state changes are exposed through the authenticated transition RPCs ab
 - list_memberships_for_admin(uuid) -> setof record
 
 ### Payments and installments
-- create_payment_for_admin(uuid,bigint,timestamptz,payment_method,text,text) -> uuid
-- get_payment_for_admin(uuid) -> record
-- list_payments_for_admin() -> setof record
-- allocate_payment_for_admin(uuid,uuid,bigint) -> bigint
-- list_payment_allocations_for_admin(uuid) -> setof record
-- list_installments_for_cycle_admin(uuid) -> setof record
-- list_installments_for_payment_admin(uuid) -> setof record
-- list_installments_for_person_payment_admin(uuid) -> setof record
+- create_payment_for_admin(uuid,uuid,bigint,timestamptz,payment_method,text,text) -> uuid — explicit Kuri scope + person membership check.
+- get_payment_for_admin(uuid) -> record — authorizes through the payment's Kuri.
+- list_payments_for_admin(uuid) -> setof record — explicit Kuri scope.
+- allocate_payment_for_admin(uuid,uuid,bigint) -> bigint — payment and installment must belong to the same Kuri.
+- list_payment_allocations_for_admin(uuid) -> setof record — scoped to the payment's Kuri.
+- list_installments_for_cycle_admin(uuid) -> setof record — cycle resolves to its Kuri authority.
+- list_installments_for_payment_admin(uuid) -> setof record — explicit Kuri scope.
+- list_installments_for_person_payment_admin(uuid,uuid) -> setof record — explicit Kuri + person scope.
 
 ### Draws and winners
 - prepare_draw_for_admin(uuid) -> uuid
@@ -83,7 +83,7 @@ Lifecycle state changes are exposed through the authenticated transition RPCs ab
 - mark_payout_paid_for_admin(uuid,timestamptz,payment_method,text,text,bigint) -> void
 - get_payout_for_admin(uuid) -> setof record
 - list_payouts_for_admin(uuid) -> setof record
-- audit_financial_ledger_for_admin() -> setof record
+- audit_financial_ledger_for_admin(uuid) -> setof record — explicit Kuri scope.
 - create_muppu_record_for_admin(uuid,uuid,uuid,bigint) -> uuid
 - list_muppu_records_for_admin(uuid,uuid) -> setof record
 - mark_muppu_paid_for_admin(uuid,text,timestamptz) -> void
@@ -113,8 +113,8 @@ Lifecycle state changes are exposed through the authenticated transition RPCs ab
 
 Administrative RPCs must enforce:
 1. auth.uid() is non-null.
-2. Target objects resolve through their organization boundary.
-3. Caller is an ADMIN or MAIN_ADMIN of that organization where the operation is administrative.
+2. Target objects resolve through their organization and, for Kuri-specific operations, Kuri boundary.
+3. Caller is an ADMIN or MAIN_ADMIN of the organization for organization-level operations, or a Kuri MAIN_ADMIN/ADMIN for Kuri-scoped operations.
 4. Cross-tenant identifiers are rejected.
 5. State-machine rules are enforced.
 6. Financial mutations lock relevant rows where concurrency could double-allocate or double-settle.
@@ -132,9 +132,10 @@ The following classes are internal database implementation and must not be expos
 ## Verification snapshot
 
 At the current 2026-09-25 ledger-update checkpoint:
-- authenticated-callable security-definer functions: 70
-- the additional five functions are the explicit organization/Kuri context APIs introduced by migration `20260925072540_identity_organization_authority_v1`
+- authenticated-callable security-definer functions: 77
 - anonymous-callable security-definer functions: 0
 - authenticated-callable lifecycle transition RPCs: 3
+- existing Kuri records have Kuri-level MAIN_ADMIN recovery rows
+- payment admin APIs are now Kuri-scoped in migration `20260925080606_payment_kuri_authority_v1`
 
 Frontend clients should call this API through the Supabase client rather than writing directly to protected domain tables.
