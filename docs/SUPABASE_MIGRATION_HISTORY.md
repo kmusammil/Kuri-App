@@ -29,3 +29,10 @@ Two subsequent live migrations are now recorded with the exact versions generate
 - `20260925080633_kuri_admin_legacy_recovery_v1` — idempotently records the audited legacy Kuri MAIN_ADMIN recovery. The live project currently has one MAIN_ADMIN authority row for each existing Kuri.
 
 The repository migration filenames were aligned to those exact remote versions after application; no remote migration-history rows were rewritten.
+
+
+## 2026-09-25 payment idempotency
+
+Two additional production migrations were applied and retained as the exact remote history:
+- `20260925081244_payment_idempotency_v1` — creates the internal financial idempotency ledger and makes payment creation/allocation require request keys.
+- `20260925081427_payment_idempotency_parameter_fix_v2` — corrects the live idempotency function parameter naming after transaction-level verification exposed a PostgreSQL parameter/column ambiguity.
