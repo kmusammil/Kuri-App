@@ -52,6 +52,7 @@ export default async function PayoutDetailPage({
 
   const payout = rows?.[0];
   if (!payout) notFound();
+  const payoutIdempotencyKey = crypto.randomUUID();
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
@@ -80,7 +81,7 @@ export default async function PayoutDetailPage({
           </div>
         ) : null}
 
-        <section className="mt-6 grid gap-4 sm:grid-cols-4">
+        <section className="mt-6 grid gap-4 sm:grid-cols-5">
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">Gross</p>
             <p className="mt-2 text-xl font-semibold">
@@ -91,6 +92,12 @@ export default async function PayoutDetailPage({
             <p className="text-sm text-slate-500">Muppu</p>
             <p className="mt-2 text-xl font-semibold">
               ₹{Number(payout.muppu_amount).toLocaleString("en-IN")}
+            </p>
+          </div>
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+            <p className="text-sm text-slate-500">Expense deductions</p>
+            <p className="mt-2 text-xl font-semibold">
+              ₹{Number(payout.expense_deductions).toLocaleString("en-IN")}
             </p>
           </div>
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -114,6 +121,11 @@ export default async function PayoutDetailPage({
           {payout.status !== "PAID" ? (
             <form action={markPayoutPaid} className="mt-5 space-y-4">
               <input type="hidden" name="winner_id" value={id} />
+              <input
+                type="hidden"
+                name="idempotency_key"
+                value={payoutIdempotencyKey}
+              />
               <label className="block text-sm font-medium">
                 Payment date
                 <input
