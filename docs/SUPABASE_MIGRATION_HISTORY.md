@@ -50,3 +50,8 @@ The linked production database contains two sequential allocation-policy migrati
 - `20260925083456_payment_allocation_policy_v1` — follow-up live version that removes the earlier advance-allocator overload and makes the membership context explicit, preventing allocation across ambiguous historical memberships.
 
 No remote migration-history rows were rewritten. The repository preserves both applied versions under their exact remote versions.
+
+
+## 2026-09-25 payment allocation invariant and concurrency coverage
+
+The payment allocation policy is now accompanied by regression checks for the core financial invariants: effective allocations cannot exceed effective payment amount, and installment `amount_paid` reconciles to effective allocations capped by `amount_due`. The allocation APIs lock the payment and the selected membership's installments in deterministic cycle order. A dedicated authenticated integration test exercises two simultaneous allocation requests against the same payment; the test expects one request to serialize and succeed while the competing request observes the reduced remaining payment balance, followed by idempotent replay verification.
