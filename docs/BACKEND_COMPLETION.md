@@ -98,3 +98,9 @@ Membership creation, membership reads, membership status transitions, and the me
 ## 2026-09-25 Kuri lifecycle update
 
 The Kuri lifecycle now records the distinction between planned and actual lifecycle events. `start_date` remains the planned date; `actual_started_at`, `enrollment_closed_at`, `completed_at`, and `archived_at` record explicit operational events. A dedicated authenticated enrollment-close API is available while the Kuri is `OPEN`, and transition to `ACTIVE` requires that closure. Existing Kuri history was not backfilled with invented timestamps.
+
+## 2026-09-25 draw idempotency update
+
+Draw execution and winner finalization now require idempotency keys and request-hash binding. A completed retry returns the previously stored result instead of rerunning randomness or inserting another winner; reusing the same key with a different request payload is rejected. The live transactional verification covered draw execution replay, selection-count payload mismatch, winner finalization replay, winner-set payload mismatch, and rollback cleanup.
+
+During that verification two live defects were found and corrected: an actor-user variable/column name collision in the draw idempotency SQL, and an incomplete financial idempotency result constraint that did not yet admit DRAW_RUN, DRAW_FINALIZE, or PAYOUT_PAYMENT completion shapes. The corresponding repairs are now recorded in Git and applied in production.
