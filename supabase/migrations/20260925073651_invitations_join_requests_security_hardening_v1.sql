@@ -40,7 +40,7 @@ declare
   plain_code text;
   random_hex text;
   normalized_email text := nullif(lower(trim(target_recipient_email)), '');
-  normalized_phone text := nullif(trim(target_recipient_phone)), '';
+  normalized_phone text := nullif(trim(target_recipient_phone), '');
   expiry timestamptz := coalesce(target_expires_at, now() + interval '7 days');
   issuer_id uuid := (select auth.uid());
 begin
