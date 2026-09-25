@@ -150,10 +150,12 @@ describe('Kuri-App draw eligibility and winner invariants', () => {
     expect(i1a).toBeTruthy()
     expect(i1b).toBeTruthy()
 
-    const [paymentA1, paymentB1] = await Promise.all([
-      payAndAllocate(env('TEST_PERSON_A_ID'), i1a.id, `DRAW-${suffix}-A1`),
-      payAndAllocate(env('TEST_PERSON_B_ID'), i1b.id, `DRAW-${suffix}-B1`),
-    ])
+    await payAndAllocate(env('TEST_PERSON_A_ID'), i1a.id, `DRAW-${suffix}-A1`)
+    const paymentB1 = await payAndAllocate(
+      env('TEST_PERSON_B_ID'),
+      i1b.id,
+      `DRAW-${suffix}-B1`,
+    )
 
     const prepareAttempts = await Promise.all([
       adminA.rpc('prepare_draw_for_admin', { target_cycle_id: cycle1.id }),
