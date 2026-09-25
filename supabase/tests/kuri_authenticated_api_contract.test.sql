@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(108);
+select plan(121);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -1183,6 +1183,95 @@ select ok(
       and pg_get_functiondef(p.oid) ilike '%PAYOUT_PAYMENT%'
   ),
   'payout payment recomputes generalized Expense deductions under idempotency'
+);
+
+
+-- Exit / death / succession authenticated API contract
+select is(
+  (select count(*) from pg_proc p where p.oid='public.create_membership_exit_for_admin(uuid,public.settlement_reason,date,public.refund_policy,bigint,text,text)'::regprocedure),
+  1,
+  'exit-create canonical API exists'
+);
+select is(
+  (select count(*) from pg_proc p where p.oid='public.settle_membership_exit_for_admin(uuid,public.muppu_settlement_method,text,timestamptz,text)'::regprocedure),
+  1,
+  'exit-settle canonical API exists'
+);
+select is(
+  (select count(*) from pg_proc p where p.oid='public.record_membership_exit_refund_for_admin(uuid,bigint,public.payment_method,text,timestamptz,text,text)'::regprocedure),
+  1,
+  'exit-refund canonical API exists'
+);
+select is(
+  (select count(*) from pg_proc p where p.oid='public.record_death_settlement_for_admin(uuid,uuid,text,text)'::regprocedure),
+  1,
+  'death-settlement canonical API exists'
+);
+select is(
+  (select count(*) from pg_proc p where p.proname in (
+    'create_membership_exit_for_admin','approve_membership_exit_for_admin',
+    'verify_death_date_for_admin','cancel_membership_exit_for_admin',
+    'settle_membership_exit_for_admin','record_membership_exit_refund_for_admin',
+    'record_death_settlement_for_admin','get_membership_exit_reconciliation_for_admin',
+    'get_membership_exit_settlement_context_for_admin','list_membership_exits_for_admin',
+    'get_death_settlement_context_for_admin','get_membership_exit_membership_id_for_admin',
+    'get_membership_nominees_for_admin','create_membership_succession_for_admin',
+    'get_membership_succession_for_admin'
+  ) and has_function_privilege('authenticated',p.oid,'EXECUTE')),
+  15,
+  'exit/death/succession APIs are executable by authenticated users'
+);
+select is(
+  (select count(*) from pg_proc p where p.proname in (
+    'create_membership_exit_for_admin','approve_membership_exit_for_admin',
+    'verify_death_date_for_admin','cancel_membership_exit_for_admin',
+    'settle_membership_exit_for_admin','record_membership_exit_refund_for_admin',
+    'record_death_settlement_for_admin','get_membership_exit_reconciliation_for_admin',
+    'get_membership_exit_settlement_context_for_admin','list_membership_exits_for_admin',
+    'get_death_settlement_context_for_admin','get_membership_exit_membership_id_for_admin',
+    'get_membership_nominees_for_admin','create_membership_succession_for_admin',
+    'get_membership_succession_for_admin'
+  ) and has_function_privilege('anon',p.oid,'EXECUTE')),
+  0,
+  'exit/death/succession APIs are not executable by anonymous users'
+);
+select ok(
+  not has_function_privilege('authenticated','public.transition_membership_exit_status_for_admin(uuid,public.settlement_status)'::regprocedure,'EXECUTE'),
+  'membership exit transition helper is internal-only'
+);
+select ok(
+  exists(select 1 from pg_class where oid='public.membership_successions'::regclass and relrowsecurity),
+  'membership_successions has RLS enabled'
+);
+select ok(
+  not has_table_privilege('authenticated','public.membership_successions','INSERT'),
+  'authenticated users cannot directly insert succession rows'
+);
+select ok(
+  not exists(
+    select 1 from pg_proc
+    where proname in (
+      'create_membership_exit_for_admin','approve_membership_exit_for_admin',
+      'verify_death_date_for_admin','cancel_membership_exit_for_admin',
+      'settle_membership_exit_for_admin','record_membership_exit_refund_for_admin',
+      'record_death_settlement_for_admin','create_membership_succession_for_admin'
+    )
+    and position('organization_users' in pg_get_functiondef(oid))>0
+  ),
+  'exit/death/succession APIs contain no legacy organization authority path'
+);
+select ok(
+  exists(select 1 from information_schema.columns where table_schema='public' and table_name='financial_idempotency_keys' and column_name='result_reference_id'),
+  'financial idempotency ledger supports UUID workflow results'
+);
+select is(
+  (select count(*) from pg_proc where oid='public.create_membership_exit_for_admin(uuid,public.settlement_reason,date,public.refund_policy,bigint,text)'::regprocedure),
+  0,
+  'legacy short exit-create overload is absent'
+);
+select ok(
+  exists(select 1 from pg_proc p where p.proname='create_membership_succession_for_admin' and array_to_string(p.proconfig,',') like '%search_path=public%'),
+  'succession writer uses a fixed search_path'
 );
 
 select * from finish();
