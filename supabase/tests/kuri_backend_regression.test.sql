@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(112);
+select plan(119);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -1132,6 +1132,75 @@ select ok(
       and pg_get_functiondef(p.oid) ilike '%FOR UPDATE OF m,k%'
   ),
   'membership status transition locks the membership and Kuri rows'
+);
+
+-- 113-119: explicit Kuri lifecycle timestamps and enrollment closure
+select ok(
+  exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='kuris'
+      and column_name in ('enrollment_closed_at','actual_started_at','completed_at','archived_at')
+  ),
+  'Kuri lifecycle timestamps are stored explicitly'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.close_kuri_enrollment_for_admin(uuid)'::regprocedure,
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.close_kuri_enrollment_for_admin(uuid)'::regprocedure,
+    'EXECUTE'
+  ),
+  'Kuri enrollment-close API is authenticated-only'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='transition_kuri_status_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%enrollment_closed_at_value%'
+      and pg_get_functiondef(p.oid) ilike '%actual_started_at_value%'
+      and pg_get_functiondef(p.oid) ilike '%completed_at_value%'
+      and pg_get_functiondef(p.oid) ilike '%archived_at_value%'
+  ),
+  'Kuri status transitions record explicit lifecycle timestamps'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='transition_kuri_status_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%Kuri enrollment must be explicitly closed before the Kuri can start%'
+  ),
+  'Kuri activation requires explicit enrollment closure'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='create_membership_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%Kuri enrollment is closed; use the controlled late-joining workflow%'
+  ),
+  'initial enrollment closure is distinct from controlled late joining'
+);
+
+select ok(
+  exists (
+    select 1 from pg_trigger
+    where tgrelid='public.kuris'::regclass
+      and tgname like '%status%'
+  ),
+  'Kuri lifecycle status guard remains trigger-protected'
 );
 
 select * from finish();
