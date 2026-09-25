@@ -79,3 +79,13 @@ Two follow-up migrations were applied and retained as historical authority:
 - `20260925085436_create_kuri_for_admin_uuid_aggregate_fix_v2` — immediate correction of the repair function's parameter reference. The current function now passes a rollback-only invocation test.
 
 These migrations are preserved exactly rather than rewriting or deleting the remote history.
+
+
+## 2026-09-25 payout authority and idempotency
+
+Three production migrations were applied and retained as exact historical entries:
+- `20260925090202_payout_kuri_authority_idempotency_v1` — moves payout preparation/status/read APIs to Kuri-scoped authority and introduces the required idempotent payout-payment API.
+- `20260925090239_payout_idempotency_parameter_fix_v2` — corrects a local-variable/column name collision in the payout idempotency implementation.
+- `20260925090311_payout_idempotency_operation_type_v1` — extends the controlled financial idempotency operation-type constraint to permit `PAYOUT_PAYMENT`.
+
+The first migration and the two follow-up repairs remain in production history; no migration-history rows were rewritten.
