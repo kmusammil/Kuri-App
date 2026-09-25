@@ -19,3 +19,7 @@ Do not use `supabase migration repair` as a bulk cleanup mechanism, and do not d
 The repository contains the current canonical SQL needed for ongoing development, including the later hardening migrations that correspond to the applied production changes. Historical migrations that were superseded are not recreated solely for cosmetic migration-list parity.
 
 Before introducing a new production migration workflow, verify the local/remote migration state explicitly and use a reviewed baseline procedure rather than ad-hoc repairs.
+
+## 2026-09-25 ledger-driven update
+
+The migration `20260925072540_identity_organization_authority_v1` was applied to the linked Supabase project. It is the first migration introduced after the 2026-09-22 backend freeze record was superseded by the Master Backend Improvement Ledger. It adds explicit organization type/context and Kuri-scoped authority without rewriting historical records.
