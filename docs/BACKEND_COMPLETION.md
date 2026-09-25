@@ -104,3 +104,9 @@ The Kuri lifecycle now records the distinction between planned and actual lifecy
 Draw execution and winner finalization now require idempotency keys and request-hash binding. A completed retry returns the previously stored result instead of rerunning randomness or inserting another winner; reusing the same key with a different request payload is rejected. The live transactional verification covered draw execution replay, selection-count payload mismatch, winner finalization replay, winner-set payload mismatch, and rollback cleanup.
 
 During that verification two live defects were found and corrected: an actor-user variable/column name collision in the draw idempotency SQL, and an incomplete financial idempotency result constraint that did not yet admit DRAW_RUN, DRAW_FINALIZE, or PAYOUT_PAYMENT completion shapes. The corresponding repairs are now recorded in Git and applied in production.
+
+## 2026-09-25 generalized Expense foundation
+
+A generalized Expense subsystem is now live as an additive financial layer: Kuri-scoped Expense Rules generate immutable per-member obligations, with `ONE_TIME` and `PER_CYCLE` frequencies and `UNPAID → PAID / WAIVED / DEDUCTED_FROM_PRIZE` settlement states. Completed/cancelled cycle history is excluded from new per-cycle obligations. Active membership creation, membership activation, and schedule generation synchronize active rules through internal helpers.
+
+The rollback-only live verification passed one-time and per-cycle obligation fan-out, terminal-cycle exclusion, paid/waived transitions, repeat-settlement rejection, rule deactivation/reactivation without duplication, cross-Kuri identity rejection, paid-payout deduction rejection, and audit coverage. The transaction was rolled back with zero Expense residue. Historical Muppu data remains untouched pending the later payout reconciliation migration.
