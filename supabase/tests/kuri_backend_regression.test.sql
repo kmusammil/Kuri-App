@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(46);
+select plan(48);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -184,6 +184,71 @@ select is(
   ),
   0::bigint,
   'core Kuri RPCs do not authorize through organization_users directly'
+);
+
+-- Remaining Kuri-scoped administrative surfaces
+select is(
+  (
+    select count(*)
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname in (
+        'generate_cycles_for_admin','generate_kuri_schedule_for_admin',
+        'transition_kuri_status_for_admin','transition_cycle_status_for_admin',
+        'transition_draw_status_for_admin','prepare_draw_for_admin',
+        'set_draw_pool_entry_for_admin','run_random_draw_for_admin',
+        'finalize_draw_for_admin','get_draw_session_for_admin',
+        'get_draw_selections_for_admin','list_draw_pool_for_admin',
+        'get_monthly_winners_for_admin','prepare_payout_for_admin',
+        'get_payout_for_admin','list_payouts_for_admin',
+        'mark_payout_paid_for_admin','transition_payout_status_for_admin',
+        'create_membership_exit_for_admin','approve_membership_exit_for_admin',
+        'settle_membership_exit_for_admin','transition_membership_exit_status_for_admin',
+        'record_membership_exit_refund_for_admin','record_death_settlement_for_admin',
+        'get_membership_exit_reconciliation_for_admin','get_death_settlement_context_for_admin',
+        'list_membership_exits_for_admin','refresh_membership_exit_financials_for_admin',
+        'get_membership_exit_membership_id_for_admin','get_membership_nominees_for_admin',
+        'transition_membership_status_for_admin','create_muppu_record_for_admin',
+        'list_muppu_records_for_admin','mark_muppu_paid_for_admin',
+        'waive_muppu_for_admin','deduct_muppu_from_prize_for_admin'
+      )
+      and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'
+  ),
+  36::bigint,
+  'remaining Kuri-scoped admin RPCs use Kuri-scoped authority'
+);
+
+select is(
+  (
+    select count(*)
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname in (
+        'generate_cycles_for_admin','generate_kuri_schedule_for_admin',
+        'transition_kuri_status_for_admin','transition_cycle_status_for_admin',
+        'transition_draw_status_for_admin','prepare_draw_for_admin',
+        'set_draw_pool_entry_for_admin','run_random_draw_for_admin',
+        'finalize_draw_for_admin','get_draw_session_for_admin',
+        'get_draw_selections_for_admin','list_draw_pool_for_admin',
+        'get_monthly_winners_for_admin','prepare_payout_for_admin',
+        'get_payout_for_admin','list_payouts_for_admin',
+        'mark_payout_paid_for_admin','transition_payout_status_for_admin',
+        'create_membership_exit_for_admin','approve_membership_exit_for_admin',
+        'settle_membership_exit_for_admin','transition_membership_exit_status_for_admin',
+        'record_membership_exit_refund_for_admin','record_death_settlement_for_admin',
+        'get_membership_exit_reconciliation_for_admin','get_death_settlement_context_for_admin',
+        'list_membership_exits_for_admin','refresh_membership_exit_financials_for_admin',
+        'get_membership_exit_membership_id_for_admin','get_membership_nominees_for_admin',
+        'transition_membership_status_for_admin','create_muppu_record_for_admin',
+        'list_muppu_records_for_admin','mark_muppu_paid_for_admin',
+        'waive_muppu_for_admin','deduct_muppu_from_prize_for_admin'
+      )
+      and pg_get_functiondef(p.oid) ilike '%organization_users%'
+  ),
+  0::bigint,
+  'remaining Kuri-scoped admin RPCs do not authorize through organization_users directly'
 );
 select ok(
   exists (
