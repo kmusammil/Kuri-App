@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(132);
+select plan(138);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -1349,6 +1349,73 @@ select ok(
             and pg_get_functiondef(p.oid) ilike '%IF idem_row.status=''COMPLETED''%'
             and pg_get_functiondef(p.oid) ilike '%FROM public.monthly_winners%'),
   'draw finalization completed retries return the existing winner count'
+);
+
+-- 133-138: Muppu Kuri authority and payout safety
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_muppu_record_for_admin','list_muppu_records_for_admin',
+       'mark_muppu_paid_for_admin','waive_muppu_for_admin',
+       'deduct_muppu_from_prize_for_admin'
+     )
+     and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'
+     and pg_get_functiondef(p.oid) not ilike '%organization_users%')=5,
+  'all Muppu client APIs use explicit Kuri authority'
+);
+
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_muppu_record_for_admin','list_muppu_records_for_admin',
+       'mark_muppu_paid_for_admin','waive_muppu_for_admin',
+       'deduct_muppu_from_prize_for_admin'
+     )
+     and has_function_privilege('authenticated',p.oid,'EXECUTE')
+     and not has_function_privilege('anon',p.oid,'EXECUTE'))=5,
+  'Muppu client APIs are authenticated-only'
+);
+
+select ok(
+  exists(
+    select 1 from pg_trigger
+    where tgrelid='public.muppu_records'::regclass
+      and tgname='muppu_records_identity_guard'
+  ),
+  'Muppu identity guard trigger exists'
+);
+
+select is(
+  (select count(*)
+   from public.muppu_records mr
+   join public.cycles c on c.id=mr.cycle_id
+   join public.kuris k on k.id=mr.kuri_id
+   join public.people p on p.id=mr.person_id
+   where c.kuri_id<>mr.kuri_id or p.organization_id<>k.organization_id),
+  0::bigint,
+  'existing Muppu records preserve cycle/Kuri/person tenancy'
+);
+
+select ok(
+  exists(
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='deduct_muppu_from_prize_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%payout processing has started%'
+  ),
+  'Muppu prize deduction is blocked after payout processing starts'
+);
+
+select ok(
+  exists(
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='create_muppu_record_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%Person does not belong to this Kuri%'
+  ),
+  'Muppu creation requires a person belonging to the target Kuri'
 );
 
 -- 130-140: generalized Expense foundation
