@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(101);
+select plan(106);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -985,6 +985,83 @@ select is(
    where po.net_amount <> greatest(po.gross_amount-po.muppu_amount-po.other_deductions,0)),
   0::bigint,
   'existing payouts satisfy gross minus deductions net-amount invariant'
+);
+
+-- 102-106: cycle authority and historical immutability
+select is(
+  (select count(*)
+   from pg_proc p
+   join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'generate_cycles_for_admin',
+       'generate_kuri_schedule_for_admin',
+       'get_cycle_for_admin',
+       'list_cycles_for_admin',
+       'transition_cycle_status_for_admin'
+     )
+     and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'),
+  5::bigint,
+  'cycle APIs use Kuri-scoped authority'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.transition_cycle_status_for_admin(uuid,public.cycle_status)'::regprocedure,
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.transition_cycle_status_for_admin(uuid,public.cycle_status)'::regprocedure,
+    'EXECUTE'
+  ),
+  'cycle transition API is authenticated-only'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='generate_cycles_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%status NOT IN (''COMPLETED'',''CANCELLED'')%'
+  ),
+  'cycle generation does not rewrite COMPLETED or CANCELLED cycle dates'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='generate_cycles_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%FOR UPDATE%'
+  )
+  and exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='transition_cycle_status_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%FOR UPDATE OF c,k%'
+  ),
+  'cycle generation and transition serialize on the Kuri/cycle rows'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='transition_cycle_status_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%current_status=''DRAW_PENDING''%'
+      and pg_get_functiondef(p.oid) ilike '%draw_sessions%'
+      and pg_get_functiondef(p.oid) ilike '%monthly_winners%'
+  ),
+  'cycle completion remains gated by a finalized draw and at least one winner'
 );
 
 select * from finish();
