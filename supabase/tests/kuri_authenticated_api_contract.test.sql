@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(29);
+select plan(33);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -382,6 +382,79 @@ select ok(
     'EXECUTE'
   ),
   'RLS authorization helpers remain callable by authenticated users'
+);
+
+
+-- 30-33: Kuri-scoped payment API contract
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.create_payment_for_admin(uuid,uuid,bigint,timestamptz,public.payment_method,text,text)'::regprocedure,
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.list_payments_for_admin(uuid)'::regprocedure,
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.allocate_payment_for_admin(uuid,uuid,bigint)'::regprocedure,
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.create_payment_for_admin(uuid,uuid,bigint,timestamptz,public.payment_method,text,text)'::regprocedure,
+    'EXECUTE'
+  ),
+  'Kuri-scoped payment mutation/read APIs are authenticated-only'
+);
+
+select ok(
+  to_regprocedure('public.create_payment_for_admin(uuid,bigint,timestamptz,public.payment_method,text,text)') is null
+  and to_regprocedure('public.list_payments_for_admin()') is null
+  and to_regprocedure('public.list_installments_for_person_payment_admin(uuid)') is null,
+  'legacy organization-wide payment API signatures are removed'
+);
+
+select is(
+  (
+    select count(*)
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname in (
+        'create_payment_for_admin',
+        'list_payments_for_admin',
+        'get_payment_for_admin',
+        'list_installments_for_person_payment_admin',
+        'list_installments_for_payment_admin',
+        'list_installments_for_cycle_admin',
+        'list_payment_allocations_for_admin',
+        'allocate_payment_for_admin',
+        'audit_financial_ledger_for_admin',
+        'refresh_membership_exit_financials_for_admin'
+      )
+      and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'
+  ),
+  10::bigint,
+  'all payment/installation admin APIs are Kuri-scoped'
+);
+
+select ok(
+  exists (
+    select 1 from information_schema.columns
+    where table_schema='public'
+      and table_name='payments'
+      and column_name='kuri_id'
+      and is_nullable='NO'
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid='public.payments'::regclass
+      and conname='payments_kuri_organization_fkey'
+  ),
+  'payment rows carry immutable Kuri tenancy'
 );
 
 select * from finish();
