@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(134);
+select plan(135);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
