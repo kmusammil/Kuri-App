@@ -77,13 +77,13 @@ Lifecycle state changes are exposed through the authenticated transition RPCs ab
 - list_installments_for_person_payment_admin(uuid,uuid) -> setof record — explicit Kuri + person scope.
 
 ### Draws and winners
-- prepare_draw_for_admin(uuid) -> uuid
-- set_draw_pool_entry_for_admin(uuid,boolean,text) -> void
+- prepare_draw_for_admin(uuid) -> uuid — creates the draw session race-safely and freezes system eligibility when the session reaches `POOL_READY`; repeated preparation after `POOL_READY` is an idempotent read.
+- set_draw_pool_entry_for_admin(uuid,boolean,text) -> void — Kuri-scoped pool override while `POOL_READY`; including a system-ineligible snapshot entry requires a reason.
 - get_draw_session_for_admin(uuid) -> setof record
 - list_draw_pool_for_admin(uuid) -> setof record
-- run_random_draw_for_admin(uuid,integer) -> setof record
+- run_random_draw_for_admin(uuid,integer) -> setof record — consumes the frozen `POOL_READY` snapshot; later installment/member changes do not silently recalculate eligibility.
 - get_draw_selections_for_admin(uuid) -> setof record
-- finalize_draw_for_admin(uuid,uuid[]) -> integer
+- finalize_draw_for_admin(uuid,uuid[]) -> integer — final selection must come from current draw selections, must contain distinct persons, cannot repeat a prior winner in the Kuri, and is bounded by `Maximum winners = M - (C - 1)`.
 - get_monthly_winners_for_admin(uuid) -> setof record
 
 ### Payouts and Muppu
@@ -128,6 +128,7 @@ Administrative RPCs must enforce:
 6. Financial mutations lock relevant rows where concurrency could double-allocate or double-settle.
 7. Draw operations enforce Kuri/cycle/draw consistency and winner-selection invariants.
 8. Security-definer functions use a fixed search path.
+9. Draw eligibility is frozen at `POOL_READY`; winner finalization serializes within the Kuri so no-repeat cannot be bypassed by concurrent finalizers.
 
 ## Non-API functions
 
@@ -147,6 +148,7 @@ At the current 2026-09-25 ledger-update checkpoint:
 - existing Kuri records have Kuri-level MAIN_ADMIN recovery rows
 - payment admin APIs are now Kuri-scoped in migration `20260925080606_payment_kuri_authority_v1`
 - payment create/allocation retries are idempotent through `financial_idempotency_keys`
+- draw preparation/finalization now have explicit race-safety and winner-invariant coverage; draw eligibility is snapshot-frozen at `POOL_READY`
 - payment allocation invariant checks and a real parallel-session race test are maintained in the DB regression/integration suites
 
 Frontend clients should call this API through the Supabase client rather than writing directly to protected domain tables.
