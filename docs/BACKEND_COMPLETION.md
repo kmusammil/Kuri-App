@@ -121,3 +121,20 @@ The live disposable end-to-end verification passed payout preparation, Expense p
 ### Membership exit / death / succession checkpoint — 2026-09-25
 
 Kuri-scoped exit/death/succession workflows are hardened. Exit requests remain operational until settlement, death cases require verified dates and nominee validation, effective financial values are used for settlement, partial refunds reconcile before final EXITED state, and succession preserves the original member identity and membership number while assigning a separate current holder. Operational payment/installment/draw APIs follow the current holder after succession.
+
+
+## Membership exit, death settlement and succession hardening
+
+Completed on 2026-09-25 on branch `backend-ledger-update`.
+
+The exit/death/succession layer is Kuri-authorized end-to-end. Administrative RPCs no longer use direct `organization_users` checks, sensitive mutations are authenticated-only, and SECURITY DEFINER mutation APIs use a fixed empty `search_path`.
+
+Exit requests are idempotent. A pending exit is a separate workflow record and does not immediately change membership status. Approval and settlement are separate state transitions. Financial values are re-derived through `calculate_membership_exit_financials`, so corrections/reversals, applicable Expenses/Muppu, unallocated approved payments, prior wins, prize entitlement and remaining installment obligations are not bypassed by stale stored totals.
+
+Death settlement requires a verified death date and a registered nominee. Death verification is immutable after recording and is bounded by the exit date/current date. Verified-death cases are excluded from draw eligibility while pending/approved, and death settlement is idempotent.
+
+Succession records are tied to the settled death case and the selected nominee's explicit successor identity. The original `memberships.person_id` remains historical; `current_holder_person_id` changes to the successor while the membership number remains unchanged. Direct Data API writes to succession/current-holder records are not exposed.
+
+Expense synchronization stops creating new obligations after a pending/approved exit request and resumes after cancellation. Payment allocation accepts the original member or the current holder after succession while preserving the Kuri boundary.
+
+Rollback-only E2E validation passed for pending exit, cancellation, death verification prerequisite, nominee/successor linkage, death settlement, succession, membership-number preservation and original-person preservation. A cross-tenant exit attempt was blocked. Live privilege/static checks confirm 18 exit/death/nominee/succession APIs use Kuri authority, with no anonymous execution on sensitive mutations.
