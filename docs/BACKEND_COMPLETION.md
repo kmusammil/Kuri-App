@@ -11,13 +11,13 @@ The database/API layer is now considered the backend contract for the applicatio
 ## Completed
 
 - Multi-tenant organization boundaries and authorization.
-- RLS on all 25 public tables.
+- RLS on all 28 public tables.
 - Authenticated PostgREST RPC/API surface with anonymous RPC exposure removed.
 - SECURITY DEFINER functions reviewed and hardened with fixed search paths.
 - Kuri, cycle, draw, membership, exit, payout, and settlement state machines.
 - Draw eligibility, winner, and membership invariants.
 - Draw and payout concurrency protection.
-- Payment and installment allocation integrity.
+- Payment and installment allocation integrity currently has clean live data; oldest-first/no-skipping, advance-payment automation, idempotency, and correction/reversal remain ledger work.
 - Payout and Muppu accounting invariants.
 - Membership exit/refund/death-settlement flows.
 - Nominee tenancy and access controls.
@@ -25,7 +25,7 @@ The database/API layer is now considered the backend contract for the applicatio
 - Financial audit trail.
 - Domain identity immutability.
 - Cross-domain tenant and financial integrity checks.
-- Authenticated API boundary tests: 27/27 passing.
+- Authenticated API contract suite is maintained alongside the live API surface; current branch plan is 33 tests.
 - Positive authenticated workflow and concurrency coverage completed.
 - Disposable positive E2E fixtures cleaned from the test organization.
 - Canonical backend API documentation.
@@ -68,4 +68,4 @@ The same backend can serve the web, Android, iOS, and desktop clients.
 
 ## 2026-09-25 update checkpoint
 
-Migration `20260925072540_identity_organization_authority_v1` was applied to the production project and establishes explicit organization type/context plus Kuri-scoped admin authority. It is intentionally additive: existing organization/Kuri records were not rewritten or assigned invented historical authority. The invitation, expense, late-fee, notification, succession, and other ledger sections remain pending and are not represented as complete by this document.
+Migration `20260925072540_identity_organization_authority_v1` was applied to the production project and establishes explicit organization type/context plus Kuri-scoped admin authority. Existing Kuris then received an audited legacy MAIN_ADMIN recovery via `kuri_admin_legacy_recovery_v1`; no historical creator was invented. Payment APIs were subsequently moved from organization-wide authorization to explicit Kuri scope in `20260925080606_payment_kuri_authority_v1`. Payment idempotency/correction/reversal and allocation policy hardening remain pending ledger work.
