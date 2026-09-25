@@ -100,12 +100,14 @@ describe('Kuri-App positive end-to-end workflow', () => {
     installmentId = ownInstallment.id
 
     const { data: payment, error: paymentError } = await adminA.rpc('create_payment_for_admin', {
+      target_kuri_id: kuriId,
       target_person_id: env('TEST_PERSON_A_ID'),
       payment_amount: 100,
       payment_date: new Date().toISOString(),
       payment_method: 'CASH',
       payment_reference: `E2E-${suffix}`,
       payment_notes: 'Disposable authenticated integration fixture',
+      idempotency_key: `E2E-PAYMENT-CREATE-${suffix}`,
     })
     expect(paymentError).toBeNull()
     expect(payment).toBeTruthy()
@@ -117,6 +119,7 @@ describe('Kuri-App positive end-to-end workflow', () => {
         target_payment_id: paymentId,
         target_installment_id: installmentId,
         allocation_amount: 100,
+        idempotency_key: `E2E-PAYMENT-ALLOC-${suffix}`,
       },
     )
     expect(allocationError).toBeNull()
