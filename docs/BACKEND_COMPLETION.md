@@ -31,12 +31,13 @@ The database/API layer is now considered the backend contract for the applicatio
 - Canonical backend API documentation.
 - Explicit organization type/context foundation.
 - Kuri-scoped MAIN_ADMIN/ADMIN authority foundation.
+- Invitation and join-request workflow with single-use codes, expiry/revocation, explicit approval/rejection, and audit events.
 
 ## Final live verification
 
-- Public tables: 26
-- Public tables with RLS: 26
-- Authenticated SECURITY DEFINER application APIs: 70, intentionally exposed
+- Public tables: 28
+- Public tables with RLS: 28
+- Authenticated SECURITY DEFINER application APIs: 77, intentionally exposed
 - Anonymous SECURITY DEFINER APIs: 0
 - SECURITY DEFINER functions without fixed search_path: 0
 - Authenticated lifecycle transition RPCs: 3
