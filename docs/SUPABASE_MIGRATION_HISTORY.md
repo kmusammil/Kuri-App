@@ -94,3 +94,12 @@ The first migration and the two follow-up repairs remain in production history; 
 ## 2026-09-25 cycle authority and immutability
 
 Migration `20260925090700_cycle_kuri_authority_and_immutability_v1` was applied to production. It moves cycle generation, schedule generation, cycle reads, and cycle status transitions to Kuri-scoped authority with row locking, and prevents regeneration from rewriting `COMPLETED` or `CANCELLED` cycle dates. No remote migration-history rows were rewritten.
+
+
+## 2026-09-25 membership late-join policy
+
+Two production migrations were applied and retained:
+- `20260925091053_membership_late_join_policy_and_kuri_authority_v1` — moves membership mutation/read/picker APIs to Kuri-scoped authority and implements non-retroactive late joining by excluding terminal cycles from new installment creation; schedule generation follows the same rule.
+- `20260925091243_membership_late_join_policy_parameter_fix_v2` — corrects a `due_date` variable/column ambiguity in schedule-generation installment creation by using explicit variable names and qualified cycle columns.
+
+No production migration-history rows were rewritten.
