@@ -36,3 +36,8 @@ The repository migration filenames were aligned to those exact remote versions a
 Two additional production migrations were applied and retained as the exact remote history:
 - `20260925081244_payment_idempotency_v1` — creates the internal financial idempotency ledger and makes payment creation/allocation require request keys.
 - `20260925081427_payment_idempotency_parameter_fix_v2` — corrects the live idempotency function parameter naming after transaction-level verification exposed a PostgreSQL parameter/column ambiguity.
+
+
+## 2026-09-25 payment correction and reversal
+
+Migration `20260925082608_payment_correction_reversal_v1` was applied to the linked Supabase project and records the append-only payment correction/reversal workflow. The migration adds the adjustment request, correction snapshot, and reversal-entry ledgers; approval/rejection/execution APIs; effective payment/allocation reconciliation; and the corresponding Kuri-scoped API updates. The original payment and allocation rows are preserved.
