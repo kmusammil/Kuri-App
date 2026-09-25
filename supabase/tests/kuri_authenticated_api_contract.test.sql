@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(27);
+select plan(29);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -53,8 +53,8 @@ select is(
    where n.nspname = 'public'
      and p.prosecdef
      and has_function_privilege('authenticated', p.oid, 'EXECUTE')),
-  70::bigint,
-  'authenticated SECURITY DEFINER API surface includes the reviewed APIs plus explicit organization context'
+  77::bigint,
+  'authenticated SECURITY DEFINER API surface includes the reviewed APIs plus invitation and join-request APIs'
 );
 
 -- 4. Every exposed SECURITY DEFINER function has an explicit search_path.
@@ -94,6 +94,35 @@ select ok(
   has_function_privilege('authenticated','public.create_kuri_for_organization_admin(uuid,text,text,date,integer,integer,bigint,integer,integer,bigint,bigint,text,refund_policy)'::regprocedure,'EXECUTE')
   and not has_function_privilege('anon','public.create_kuri_for_organization_admin(uuid,text,text,date,integer,integer,bigint,integer,integer,bigint,bigint,text,refund_policy)'::regprocedure,'EXECUTE'),
   'organization-scoped Kuri creation API is authenticated-only'
+);
+
+-- 5. Invitation and join-request APIs are authenticated-only and part of the reviewed boundary.
+select is(
+  (select count(*)
+   from pg_proc p
+   join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_kuri_invitation_for_admin',
+       'revoke_kuri_invitation_for_admin',
+       'accept_kuri_invitation',
+       'list_kuri_join_requests_for_admin',
+       'list_kuri_invitations_for_admin',
+       'approve_kuri_join_request_for_admin',
+       'reject_kuri_join_request_for_admin'
+     )
+     and p.prosecdef
+     and has_function_privilege('authenticated',p.oid,'EXECUTE')
+     and not has_function_privilege('anon',p.oid,'EXECUTE')
+  ),
+  7::bigint,
+  'seven invitation/join-request APIs are authenticated-only'
+);
+
+select ok(
+  exists (select 1 from pg_class where oid='public.kuri_invitations'::regclass and relrowsecurity)
+  and exists (select 1 from pg_class where oid='public.kuri_join_requests'::regclass and relrowsecurity),
+  'invitation and join-request tables remain RLS protected'
 );
 
 -- 5. Lifecycle transition RPCs are intentionally client-callable and remain protected by the reviewed API surface.
