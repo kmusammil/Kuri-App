@@ -222,6 +222,7 @@ describe('Kuri-App draw eligibility and winner invariants', () => {
     const drawAfterFreeze = await adminA.rpc('run_random_draw_for_admin', {
       target_cycle_id: cycle1.id,
       selection_count: 2,
+      p_idempotency_key: `DRAW-RUN-${suffix}-${2}`,
     })
     expect(drawAfterFreeze.error).toBeNull()
     expect(drawAfterFreeze.data).toHaveLength(2)
@@ -230,9 +231,10 @@ describe('Kuri-App draw eligibility and winner invariants', () => {
     expect(selected.map((row) => row.membership_id).sort()).toEqual([membershipA, membershipB].sort())
 
     const tooManyWinners = await adminA.rpc('finalize_draw_for_admin', {
-      target_cycle_id: cycle1.id,
-      final_membership_ids: [membershipA, membershipB],
-    })
+        target_cycle_id: cycle1.id,
+        final_membership_ids: [membershipA, membershipB],,
+        p_idempotency_key: `DRAW-FINALIZE-${suffix}`,
+      })
     expect(tooManyWinners.data).toBeNull()
     expect(tooManyWinners.error?.message).toContain('maximum feasible winner count')
 
@@ -242,7 +244,8 @@ describe('Kuri-App draw eligibility and winner invariants', () => {
     const finalizeRace = await Promise.all([
       adminA.rpc('finalize_draw_for_admin', {
         target_cycle_id: cycle1.id,
-        final_membership_ids: [winner],
+        final_membership_ids: [winner],,
+        p_idempotency_key: `DRAW-FINALIZE-${suffix}`,
       }),
       adminB.rpc('finalize_draw_for_admin', {
         target_cycle_id: cycle1.id,
@@ -274,14 +277,16 @@ describe('Kuri-App draw eligibility and winner invariants', () => {
     const draw2 = await adminA.rpc('run_random_draw_for_admin', {
       target_cycle_id: cycle2.id,
       selection_count: 2,
+      p_idempotency_key: `DRAW-RUN-${suffix}-${2}`,
     })
     expect(draw2.error).toBeNull()
     expect(draw2.data).toHaveLength(2)
 
     const repeatAttempt = await adminA.rpc('finalize_draw_for_admin', {
-      target_cycle_id: cycle2.id,
-      final_membership_ids: [winnerForCycle2],
-    })
+        target_cycle_id: cycle2.id,
+        final_membership_ids: [winnerForCycle2],,
+        p_idempotency_key: `DRAW-FINALIZE-${suffix}`,
+      })
     expect(repeatAttempt.data).toBeNull()
     expect(repeatAttempt.error?.message).toContain('already won in this Kuri')
 
@@ -291,9 +296,10 @@ describe('Kuri-App draw eligibility and winner invariants', () => {
     expect(validCycle2Winner).toBeTruthy()
 
     const finalizeCycle2 = await adminA.rpc('finalize_draw_for_admin', {
-      target_cycle_id: cycle2.id,
-      final_membership_ids: [otherForCycle2],
-    })
+        target_cycle_id: cycle2.id,
+        final_membership_ids: [otherForCycle2],,
+        p_idempotency_key: `DRAW-FINALIZE-${suffix}`,
+      })
     expect(finalizeCycle2.error).toBeNull()
     expect(finalizeCycle2.data).toBe(1)
   })
