@@ -88,3 +88,8 @@ The payout surface now uses Kuri-scoped authority for preparation, status transi
 ## 2026-09-25 cycle authority update
 
 Cycle generation, schedule generation, cycle reads, and cycle status transitions now authorize through Kuri administration. Cycle/Kuri rows are locked during mutation, and schedule regeneration will not rewrite dates on `COMPLETED` or `CANCELLED` cycles. Live rollback checks confirmed cross-Kuri access is rejected, terminal cycle dates survive regeneration, and no idempotency residue is left behind.
+
+
+## 2026-09-25 membership/enrollment hardening update
+
+Membership creation, membership reads, membership status transitions, and the membership picker now authorize through Kuri administration. Membership creation continues to lock the Kuri row for capacity enforcement. The implementation adopts the ledger-required non-retroactive late-join policy because the source ledger does not define a separate catch-up vocabulary: new memberships receive installments only for non-terminal cycles, while `COMPLETED` and `CANCELLED` cycle history is not recreated. Schedule generation follows the same rule. Live rollback verification confirmed no terminal-cycle installment creation and no test residue.
