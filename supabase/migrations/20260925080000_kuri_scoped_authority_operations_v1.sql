@@ -202,7 +202,7 @@ begin
  if (select auth.uid()) is null then raise exception 'You must be signed in.'; end if;
  select k.status,k.organization_id,k.number_of_cycles into current_status,org_id,configured_cycles from public.kuris k where k.id=target_kuri_id for update;
  if org_id is null then raise exception 'Kuri not found.'; end if;
- if not public.has_kuri_admin_role(k.id, array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to change this Kuri status.'; end if;
+ if not public.has_kuri_admin_role(target_kuri_id, array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to change this Kuri status.'; end if;
  if current_status=target_status then return current_status; end if;
  if not ((current_status='DRAFT' and target_status='OPEN') or (current_status='OPEN' and target_status='ACTIVE') or (current_status='ACTIVE' and target_status='COMPLETED') or (current_status='COMPLETED' and target_status='ARCHIVED')) then raise exception 'Invalid Kuri status transition: % -> %.',current_status,target_status; end if;
  if current_status='ACTIVE' and target_status='COMPLETED' then
@@ -227,7 +227,7 @@ begin
  if (select auth.uid()) is null then raise exception 'You must be signed in.'; end if;
  select c.status,c.kuri_id,k.organization_id into current_status,target_kuri_id,org_id from public.cycles c join public.kuris k on k.id=c.kuri_id where c.id=target_cycle_id for update;
  if org_id is null then raise exception 'Cycle not found.'; end if;
- if not public.has_kuri_admin_role(k.id, array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to change this cycle status.'; end if;
+ if not public.has_kuri_admin_role((select c.kuri_id from public.cycles c where c.id=target_cycle_id), array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to change this cycle status.'; end if;
  if current_status=target_status then return current_status; end if;
  if not ((current_status='UPCOMING' and target_status='OPEN') or (current_status='OPEN' and target_status='PAYMENT_CLOSED') or (current_status='PAYMENT_CLOSED' and target_status='DRAW_PENDING') or (current_status='DRAW_PENDING' and target_status='COMPLETED') or (current_status in ('UPCOMING','OPEN','PAYMENT_CLOSED','DRAW_PENDING') and target_status='CANCELLED')) then raise exception 'Invalid cycle status transition: % -> %.',current_status,target_status; end if;
  if current_status='DRAW_PENDING' and target_status='COMPLETED' then
@@ -252,7 +252,7 @@ begin
  if (select auth.uid()) is null then raise exception 'You must be signed in.'; end if;
  select d.status,d.cycle_id,k.organization_id,c.status into current_status,target_cycle_id,org_id,cycle_status from public.draw_sessions d join public.kuris k on k.id=d.kuri_id join public.cycles c on c.id=d.cycle_id where d.id=target_draw_session_id for update;
  if org_id is null then raise exception 'Draw session not found.'; end if;
- if not public.has_kuri_admin_role(k.id, array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to change this draw status.'; end if;
+ if not public.has_kuri_admin_role((select d.kuri_id from public.draw_sessions d where d.id=target_draw_session_id), array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to change this draw status.'; end if;
  if current_status=target_status then return current_status; end if;
  if not ((current_status='DRAFT' and target_status='POOL_READY') or (current_status='POOL_READY' and target_status in ('DRAWING','CANCELLED')) or (current_status='DRAWING' and target_status in ('RESULTS_READY','CANCELLED')) or (current_status='RESULTS_READY' and target_status='FINALIZED')) then raise exception 'Invalid draw status transition: % -> %.',current_status,target_status; end if;
  if target_status='POOL_READY' then
@@ -383,7 +383,7 @@ begin
   where e.id=target_entry_id;
 
   if org_id is null then raise exception 'Draw pool entry not found.'; end if;
-  if not public.has_kuri_admin_role(k.id, array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then
+  if not public.has_kuri_admin_role((select c.kuri_id from public.draw_pool_entries e join public.draw_sessions d on d.id=e.draw_session_id join public.cycles c on c.id=d.cycle_id where e.id=target_entry_id), array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then
     raise exception 'You do not have permission to modify this draw pool.';
   end if;
   if session_status<>'POOL_READY' then
@@ -730,7 +730,7 @@ select po.* into payout_row from public.payouts po join public.monthly_winners m
 if not found then raise exception 'Payout not found.'; end if;
 select k.organization_id into target_org_id from public.monthly_winners mw join public.cycles c on c.id=mw.cycle_id join public.kuris k on k.id=c.kuri_id where mw.id=target_winner_id;
 if target_org_id is null then raise exception 'Monthly winner not found.'; end if;
-if not public.has_kuri_admin_role(k.id, array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to process this payout.'; end if;
+if not public.has_kuri_admin_role((select c.kuri_id from public.monthly_winners mw join public.cycles c on c.id=mw.cycle_id where mw.id=target_winner_id), array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to process this payout.'; end if;
 if payout_row.status<>'PENDING' then raise exception 'Only a PENDING payout can be marked PAID.'; end if;
 perform public.transition_payout_status_for_admin(payout_row.id,'PROCESSING');
 computed_net_amount:=greatest(payout_row.gross_amount-payout_row.muppu_amount-payout_other_deductions,0);
@@ -760,7 +760,7 @@ begin
 
   if org_id is null then raise exception 'Payout not found.'; end if;
 
-  if not public.has_kuri_admin_role(k.id, array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to change this payout status.'; end if;
+  if not public.has_kuri_admin_role((select c.kuri_id from public.payouts p join public.monthly_winners mw on mw.id=p.monthly_winner_id join public.cycles c on c.id=mw.cycle_id where p.id=target_payout_id), array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to change this payout status.'; end if;
 
   if current_status=target_status then return current_status; end if;
 
@@ -862,7 +862,7 @@ begin
   for update;
 
   if target_org_id is null then raise exception 'Exit record not found.'; end if;
-  if not public.has_kuri_admin_role(k.id, array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to approve this exit.'; end if;
+  if not public.has_kuri_admin_role((select m.kuri_id from public.membership_exits me join public.memberships m on m.id=me.membership_id where me.id=target_exit_id), array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to approve this exit.'; end if;
   if existing_status<>'PENDING' then raise exception 'Exit is not pending approval.'; end if;
 
   select coalesce(sum(pa.amount),0) into contributed_amount
@@ -905,7 +905,7 @@ begin
   for update;
 
   if target_org_id is null then raise exception 'Exit record not found.'; end if;
-  if not public.has_kuri_admin_role(k.id, array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to settle this exit.'; end if;
+  if not public.has_kuri_admin_role((select m.kuri_id from public.membership_exits me join public.memberships m on m.id=me.membership_id where me.id=target_exit_id), array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to settle this exit.'; end if;
   if target_status<>'APPROVED' then raise exception 'Exit must be approved before settlement.'; end if;
   if settlement_payment_method='PAID_IN_ADVANCE' then
     raise exception 'Use the refund payment action to record an immediate refund.';
@@ -944,7 +944,7 @@ begin
 
   if org_id is null then raise exception 'Membership exit not found.'; end if;
 
-  if not public.has_kuri_admin_role(k.id, array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to change this exit status.'; end if;
+  if not public.has_kuri_admin_role((select m.kuri_id from public.membership_exits me join public.memberships m on m.id=me.membership_id where me.id=target_exit_id), array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to change this exit status.'; end if;
 
   if current_status=target_status then return current_status; end if;
 
@@ -989,7 +989,7 @@ begin
   for update;
 
   if target_org_id is null then raise exception 'Exit record not found.'; end if;
-  if not public.has_kuri_admin_role(k.id, array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to record this refund.'; end if;
+  if not public.has_kuri_admin_role((select m.kuri_id from public.membership_exits me join public.memberships m on m.id=me.membership_id where me.id=target_exit_id), array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to record this refund.'; end if;
   if not exists (
     select 1 from public.membership_exits me
     where me.id=target_exit_id and me.status='APPROVED' and me.refund_policy='IMMEDIATE'
@@ -1042,7 +1042,7 @@ begin
   for update;
 
   if v_org_id is null then raise exception 'Death exit record not found.'; end if;
-  if not public.has_kuri_admin_role(k.id, array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to settle this death case.'; end if;
+  if not public.has_kuri_admin_role((select m.kuri_id from public.membership_exits me join public.memberships m on m.id=me.membership_id where me.id=target_exit_id), array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to settle this death case.'; end if;
   if v_status<>'APPROVED' then raise exception 'Death exit must be approved before settlement.'; end if;
   if target_nominee_id is null then raise exception 'A nominee must be selected before settlement.'; end if;
   if not exists(select 1 from public.nominees n where n.id=target_nominee_id and n.person_id=v_person_id) then
@@ -1158,7 +1158,7 @@ begin
 if auth.uid() is null then raise exception 'You must be signed in.'; end if;
 select k.organization_id,me.membership_id into target_org_id,target_membership_id from public.membership_exits me join public.memberships m on m.id=me.membership_id join public.kuris k on k.id=m.kuri_id where me.id=target_exit_id;
 if target_org_id is null then raise exception 'Exit record not found.'; end if;
-if not public.has_kuri_admin_role(k.id, array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to refresh this exit.'; end if;
+if not public.has_kuri_admin_role((select m.kuri_id from public.membership_exits me join public.memberships m on m.id=me.membership_id where me.id=target_exit_id), array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to refresh this exit.'; end if;
 select coalesce(sum(pa.amount),0) into contributed_amount from public.payment_allocations pa join public.payments pay on pay.id=pa.payment_id join public.installments i on i.id=pa.installment_id where i.membership_id=target_membership_id and pay.status='APPROVED' and pay.organization_id=target_org_id;
 update public.membership_exits me set amount_contributed=contributed_amount,refund_amount=case when coalesce(me.refund_amount,0)=0 then contributed_amount else least(me.refund_amount,contributed_amount) end where me.id=target_exit_id; end $function$;
 
@@ -1322,7 +1322,7 @@ begin
 
   if v_org_id is null then raise exception 'Muppu record not found.'; end if;
 
-  if not public.has_kuri_admin_role(k.id, array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to manage Muppu.'; end if;
+  if not public.has_kuri_admin_role((select mr.kuri_id from public.muppu_records mr where mr.id=target_muppu_id), array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to manage Muppu.'; end if;
 
   update public.muppu_records mr
   set status='PAID',
@@ -1346,7 +1346,7 @@ begin
   if auth.uid() is null then raise exception 'You must be signed in.'; end if;
   select k.organization_id into v_org_id from public.muppu_records mr join public.kuris k on k.id=mr.kuri_id where mr.id=target_muppu_id;
   if v_org_id is null then raise exception 'Muppu record not found.'; end if;
-  if not public.has_kuri_admin_role(k.id, array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to manage Muppu.'; end if;
+  if not public.has_kuri_admin_role((select mr.kuri_id from public.muppu_records mr where mr.id=target_muppu_id), array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to manage Muppu.'; end if;
   update public.muppu_records mr
   set status='WAIVED',settlement_method='WAIVED',payment_reference=nullif(btrim(waiver_reference),'')
   where mr.id=target_muppu_id and mr.status='UNPAID';
@@ -1365,7 +1365,7 @@ begin
   if auth.uid() is null then raise exception 'You must be signed in.'; end if;
   select k.organization_id into v_org_id from public.muppu_records mr join public.kuris k on k.id=mr.kuri_id where mr.id=target_muppu_id;
   if v_org_id is null then raise exception 'Muppu record not found.'; end if;
-  if not public.has_kuri_admin_role(k.id, array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to manage Muppu.'; end if;
+  if not public.has_kuri_admin_role((select mr.kuri_id from public.muppu_records mr where mr.id=target_muppu_id), array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]) then raise exception 'You do not have permission to manage Muppu.'; end if;
   update public.muppu_records mr
   set status='DEDUCTED',settlement_method='DEDUCTED_FROM_PRIZE',payment_reference=nullif(btrim(deduction_reference),'')
   where mr.id=target_muppu_id and mr.status='UNPAID';
