@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(106);
+select plan(112);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -1062,6 +1062,76 @@ select ok(
       and pg_get_functiondef(p.oid) ilike '%monthly_winners%'
   ),
   'cycle completion remains gated by a finalized draw and at least one winner'
+);
+
+-- 107-112: membership authority, capacity locking, and non-retroactive late join policy
+select is(
+  (select count(*)
+   from pg_proc p
+   join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_membership_for_admin',
+       'list_memberships_for_admin',
+       'transition_membership_status_for_admin',
+       'list_people_available_for_membership'
+     )
+     and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'),
+  4::bigint,
+  'membership and membership-picker APIs use Kuri-scoped authority'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='create_membership_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%status NOT IN (''COMPLETED'',''CANCELLED'')%'
+  ),
+  'late-joining membership policy excludes terminal cycles from new installment creation'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='generate_cycles_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%c.status NOT IN (''COMPLETED'',''CANCELLED'')%'
+  )
+  and exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='generate_kuri_schedule_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%c.status NOT IN (''COMPLETED'',''CANCELLED'')%'
+  ),
+  'schedule generation does not create retroactive installments for terminal cycles'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='create_membership_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%FROM public.kuris k%'
+      and pg_get_functiondef(p.oid) ilike '%FOR UPDATE%'
+      and pg_get_functiondef(p.oid) ilike '%membership_limit%'
+  ),
+  'membership creation locks the Kuri row while enforcing membership capacity'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='transition_membership_status_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%FOR UPDATE OF m,k%'
+  ),
+  'membership status transition locks the membership and Kuri rows'
 );
 
 select * from finish();
