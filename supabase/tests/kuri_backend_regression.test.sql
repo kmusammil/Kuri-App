@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(116);
+select plan(127);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -1285,6 +1285,104 @@ select ok(
             and pg_get_functiondef(p.oid) ilike '%IF idem_row.status=''COMPLETED''%'
             and pg_get_functiondef(p.oid) ilike '%FROM public.monthly_winners%'),
   'draw finalization completed retries return the existing winner count'
+);
+
+-- 130-140: generalized Expense foundation
+select ok(
+  to_regclass('public.expense_rules') is not null
+  and to_regclass('public.expense_obligations') is not null
+  and (select relrowsecurity from pg_class where oid='public.expense_rules'::regclass)
+  and (select relrowsecurity from pg_class where oid='public.expense_obligations'::regclass),
+  'Expense rule and obligation tables exist with RLS enabled'
+);
+
+select ok(
+  not has_table_privilege('authenticated','public.expense_rules','SELECT')
+  and not has_table_privilege('authenticated','public.expense_obligations','SELECT'),
+  'Expense tables are not directly readable by authenticated clients'
+);
+
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname in (
+     'create_expense_rule_for_admin','set_expense_rule_active_for_admin',
+     'list_expense_rules_for_admin','list_expense_obligations_for_admin',
+     'mark_expense_obligation_paid_for_admin','waive_expense_obligation_for_admin',
+     'deduct_expense_from_prize_for_admin'
+   ) and has_function_privilege('authenticated',p.oid,'EXECUTE')
+   and not has_function_privilege('anon',p.oid,'EXECUTE')
+   and p.proconfig @> ARRAY['search_path=public'])=7,
+  'Expense client APIs are authenticated-only SECURITY DEFINER functions with a fixed search_path'
+);
+
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname in ('sync_expense_obligations_for_rule','sync_expense_obligations_for_membership','sync_expense_obligations_for_kuri')
+     and not has_function_privilege('authenticated',p.oid,'EXECUTE')
+     and not has_function_privilege('anon',p.oid,'EXECUTE')
+     and p.proconfig @> ARRAY['search_path=""'])=3,
+  'Expense synchronization helpers remain internal and non-callable by clients'
+);
+
+select ok(
+  exists(select 1 from pg_type t join pg_enum e on e.enumtypid=t.oid join pg_namespace n on n.oid=t.typnamespace
+         where n.nspname='public' and t.typname='expense_frequency' and e.enumlabel in ('ONE_TIME','PER_CYCLE'))
+  and exists(select 1 from pg_type t join pg_enum e on e.enumtypid=t.oid join pg_namespace n on n.oid=t.typnamespace
+         where n.nspname='public' and t.typname='expense_obligation_status' and e.enumlabel in ('UNPAID','PAID','WAIVED','DEDUCTED_FROM_PRIZE')),
+  'Expense frequency and settlement status vocabularies are defined'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='create_expense_rule_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'
+           and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_rule%'),
+  'Expense rule creation is Kuri-scoped and creates obligations through the synchronization layer'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='sync_expense_obligations_for_rule'
+           and pg_get_functiondef(p.oid) ilike '%c.status NOT IN (''COMPLETED'',''CANCELLED'')%'),
+  'Per-cycle Expense obligations exclude terminal cycles'
+);
+
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname in ('mark_expense_obligation_paid_for_admin','waive_expense_obligation_for_admin','deduct_expense_from_prize_for_admin')
+     and pg_get_functiondef(p.oid) ilike '%status=''UNPAID''%')=3,
+  'Expense settlement APIs require obligations to be UNPAID'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='deduct_expense_from_prize_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%payout_status<>''PENDING''%'),
+  'Expense prize deductions are restricted to pending payouts'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='audit_financial_change'
+           and pg_get_functiondef(p.oid) ilike '%expense_rules%'
+           and pg_get_functiondef(p.oid) ilike '%expense_obligations%'),
+  'Expense rules and obligations have explicit financial audit organization resolution'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='create_membership_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_membership%')
+  and exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='transition_membership_status_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_membership%')
+  and exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='generate_cycles_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_kuri%')
+  and exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='generate_kuri_schedule_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_kuri%'),
+  'Expense obligations synchronize with activation, enrollment and schedule generation'
 );
 
 select * from finish();
