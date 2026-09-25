@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(81);
+select plan(87);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -940,6 +940,73 @@ select ok(
       and pg_get_functiondef(p.oid) ilike '%controlled late-joining workflow%'
   ),
   'Kuri enrollment closure does not remove the controlled late-joining path'
+);
+
+-- 82-87: draw operation idempotency contract
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.run_random_draw_for_admin(uuid,integer,text)'::regprocedure,
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.finalize_draw_for_admin(uuid,uuid[],text)'::regprocedure,
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.finalize_draw_for_admin(uuid,uuid[],text)'::regprocedure,
+    'EXECUTE'
+  ),
+  'draw operation APIs use required idempotency keys and are authenticated-only'
+);
+
+select ok(
+  to_regprocedure('public.run_random_draw_for_admin(uuid,integer)') is null
+  and to_regprocedure('public.finalize_draw_for_admin(uuid,uuid[])') is null,
+  'draw legacy non-idempotent signatures are absent'
+);
+
+select ok(
+  exists (
+    select 1 from pg_constraint
+    where conrelid='public.financial_idempotency_keys'::regclass
+      and pg_get_constraintdef(oid) ilike '%DRAW_RUN%'
+      and pg_get_constraintdef(oid) ilike '%DRAW_FINALIZE%'
+  ),
+  'draw idempotency operation types are allowed'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='run_random_draw_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%DRAW_RUN%'
+      and pg_get_functiondef(p.oid) ilike '%request_hash%'
+  )
+  and exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='finalize_draw_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%DRAW_FINALIZE%'
+      and pg_get_functiondef(p.oid) ilike '%request_hash%'
+  ),
+  'draw operation APIs bind idempotency keys to request hashes'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='run_random_draw_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%IF idem_row.status=''COMPLETED''%'
+  ),
+  'random draw completed retries return the existing selection set'
 );
 
 select * from finish();
