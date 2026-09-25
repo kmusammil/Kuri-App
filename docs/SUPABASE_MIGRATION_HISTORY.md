@@ -122,6 +122,16 @@ The live rollback-only verification passed draw-run replay, same-key/different-p
 ## 2026-09-25 generalized Expense foundation
 
 - `20260925113719_expense_rule_obligation_foundation_v1` — adds `expense_rules`, `expense_obligations`, settlement status/frequency types, Kuri-scoped admin APIs, identity consistency enforcement, RLS/direct-access restrictions, and financial audit coverage.
-- `20260925114000_expense_obligation_enrollment_sync_v2` — synchronizes active Expense obligations with membership activation/creation and cycle/schedule generation through internal helpers.
+- `20260925113808_expense_obligation_enrollment_sync_v2` — synchronizes active Expense obligations with membership activation/creation and cycle/schedule generation through internal helpers.
 
 The foundation is additive: existing `muppu_records` remain intact. Payout gross/net reconciliation with generalized Expenses is intentionally a subsequent slice.
+
+## 2026-09-25 payout Expense integration
+
+Four production migrations are retained as exact historical entries for the generalized Expense-to-payout integration:
+- `20260925114220_payout_generalized_expense_integration_v1` — adds `payouts.expense_deductions` and integrates generalized Expense deductions into payout preparation/payment and payout reads.
+- `20260925114318_payout_generalized_expense_integration_fix_v2` — fixes payout-column qualification in Expense deduction recalculation.
+- `20260925114718_payout_generalized_expense_prepare_fix_v3` — replaces the fragile payout UPSERT path with deterministic row locking and pending-row recomputation.
+- `20260925114858_payout_payment_idempotency_result_fix_v5` — fixes the payout idempotency completion result shape so `PAYOUT_PAYMENT` does not misuse the payment-result foreign key.
+
+The disposable authenticated end-to-end payout/Expense verification passed and rolled back completely. Existing historical Muppu records and payout rows were preserved.
