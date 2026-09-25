@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(75);
+select plan(83);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -830,6 +830,68 @@ select ok(
           where n.nspname='public' and p.proname='reject_payment_adjustment_request_for_admin'
             and pg_get_functiondef(p.oid) ilike '%btrim(rejection_reason)%'),
   'payment rejection API uses unambiguous input parameter naming'
+);
+
+
+-- 76-83: payment allocation policy
+select ok(
+  to_regprocedure('public.allocate_payment_to_oldest_installments_for_admin(uuid,uuid,bigint,text)') is not null
+  and has_function_privilege('authenticated','public.allocate_payment_to_oldest_installments_for_admin(uuid,uuid,bigint,text)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.allocate_payment_to_oldest_installments_for_admin(uuid,uuid,bigint,text)'::regprocedure,'EXECUTE'),
+  'oldest-first advance allocation API is authenticated-only'
+);
+select ok(
+  to_regprocedure('public.allocate_payment_to_oldest_installments_for_admin(uuid,bigint,text)') is null,
+  'stale ambiguous advance allocation signature is removed'
+);
+select ok(
+  exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='allocate_payment_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%Cannot skip outstanding earlier installments%'
+  ),
+  'targeted allocation rejects skipping earlier outstanding installments'
+);
+select ok(
+  exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='allocate_payment_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%ORDER BY lock_c.cycle_number,lock_i.id%'
+      and pg_get_functiondef(p.oid) ilike '%FOR UPDATE%'
+  ),
+  'targeted allocation locks installments in deterministic cycle order'
+);
+select ok(
+  exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='allocate_payment_to_oldest_installments_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%target_membership_id%'
+      and pg_get_functiondef(p.oid) ilike '%Payment person does not match membership person%'
+  ),
+  'advance allocation is explicitly membership-scoped'
+);
+select ok(
+  exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='allocate_payment_to_oldest_installments_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%ORDER BY oc.cycle_number,oi.id%'
+      and pg_get_functiondef(p.oid) ilike '%requested_allocation_amount>total_outstanding%'
+  ),
+  'advance allocation is oldest-first and bounded by membership outstanding balance'
+);
+select ok(
+  exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='allocate_payment_to_oldest_installments_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%financial_idempotency_keys%'
+      and pg_get_functiondef(p.oid) ilike '%PAYMENT_ALLOCATION%'
+  ),
+  'advance allocation uses the existing financial idempotency ledger'
+);
+select ok(
+  has_function_privilege('authenticated','public.allocate_payment_for_admin(uuid,uuid,bigint,text)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.allocate_payment_for_admin(uuid,uuid,bigint,text)'::regprocedure,'EXECUTE'),
+  'targeted allocation API remains authenticated-only after policy hardening'
 );
 
 select * from finish();
