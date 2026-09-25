@@ -118,3 +118,10 @@ Four production migrations are retained as historical authority for draw replay 
 - 20260925113105_financial_idempotency_result_invariant_v4 — extends the completion-result invariant to cover payout-payment and draw operations.
 
 The live rollback-only verification passed draw-run replay, same-key/different-payload rejection, draw-finalization replay, and same-key/different-winner rejection. The test transaction was rolled back and left no draw-idempotency residue.
+
+## 2026-09-25 generalized Expense foundation
+
+- `20260925113719_expense_rule_obligation_foundation_v1` — adds `expense_rules`, `expense_obligations`, settlement status/frequency types, Kuri-scoped admin APIs, identity consistency enforcement, RLS/direct-access restrictions, and financial audit coverage.
+- `20260925114000_expense_obligation_enrollment_sync_v2` — synchronizes active Expense obligations with membership activation/creation and cycle/schedule generation through internal helpers.
+
+The foundation is additive: existing `muppu_records` remain intact. Payout gross/net reconciliation with generalized Expenses is intentionally a subsequent slice.
