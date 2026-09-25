@@ -6,7 +6,7 @@ Status: canonical API inventory for the current Supabase production database; up
 
 Client calls use Supabase Auth + PostgREST RPCs. Every client-facing mutation below is an authenticated application API operation. Authorization is enforced inside the function and is scoped to the target Kuri where the operation is Kuri-specific; organization context remains explicit for organization-level operations.
 
-Security-definer is intentional for the client-facing admin RPCs because these functions centralize privileged mutations and reads behind explicit authorization and validation. Supabase's advisor flags them because they are reachable by the authenticated role; that warning is treated as a reviewed, intentional API exposure. The live reviewed authenticated SECURITY DEFINER surface is now 85 functions.
+Security-definer is intentional for the client-facing admin RPCs because these functions centralize privileged mutations and reads behind explicit authorization and validation. Supabase's advisor flags them because they are reachable by the authenticated role; that warning is treated as a reviewed, intentional API exposure. The live reviewed authenticated SECURITY DEFINER surface is now 95 functions.
 
 Anonymous execution is disabled for all exposed security-definer RPCs.
 
@@ -91,10 +91,10 @@ Lifecycle state changes are exposed through the authenticated transition RPCs ab
 - get_monthly_winners_for_admin(uuid) -> setof record
 
 ### Payouts and Muppu
-- prepare_payout_for_admin(uuid) -> uuid
+- prepare_payout_for_admin(uuid) -> uuid — recomputes pending payout deductions from linked `DEDUCTED_FROM_PRIZE` Expense obligations while preserving terminal payout rows.
 - mark_payout_paid_for_admin(uuid,timestamptz,payment_method,text,text,text,bigint) -> void — Kuri-scoped payout payment with required idempotency key; retries of the same request replay safely, while the same key with a different payload is rejected.
-- get_payout_for_admin(uuid) -> setof record
-- list_payouts_for_admin(uuid) -> setof record
+- get_payout_for_admin(uuid) -> setof record — includes `expense_deductions` as a distinct payout component.
+- list_payouts_for_admin(uuid) -> setof record — includes `expense_deductions` as a distinct payout component.
 - audit_financial_ledger_for_admin(uuid) -> setof record — explicit Kuri scope.
 - create_muppu_record_for_admin(uuid,uuid,uuid,bigint) -> uuid
 - list_muppu_records_for_admin(uuid,uuid) -> setof record
@@ -154,7 +154,7 @@ At the current 2026-09-25 ledger-update checkpoint:
 - payment admin APIs are now Kuri-scoped in migration `20260925080606_payment_kuri_authority_v1`
 - payment create/allocation retries are idempotent through `financial_idempotency_keys`
 - draw preparation/finalization now have explicit race-safety and winner-invariant coverage; draw eligibility is snapshot-frozen at `POOL_READY`; draw execution and finalization require idempotency keys with request-hash replay protection
-- payout preparation/payment now use Kuri-scoped authority, row locking, and `financial_idempotency_keys` for payout-payment replay protection
+- payout preparation/payment now use Kuri-scoped authority, row locking, dedicated `expense_deductions` payout accounting, and `financial_idempotency_keys` for payout-payment replay protection
 - cycle generation/reads/transitions now use Kuri authority, row locking, and terminal-cycle schedule immutability
 - payment allocation invariant checks and a real parallel-session race test are maintained in the DB regression/integration suites
 
@@ -172,3 +172,7 @@ The Expense layer is now distinct from legacy Muppu history and follows the cano
 - `deduct_expense_from_prize_for_admin(obligation_id,payout_id,reference)` moves an unpaid obligation to `DEDUCTED_FROM_PRIZE` only when the referenced payout is `PENDING`, belongs to the same Kuri, and targets the same person.
 
 Existing completed/cancelled cycle history is not recreated for new per-cycle rules. New active memberships and schedule generation synchronize active Expense rules through internal, non-client-callable helpers. Expense tables use RLS with direct client table access revoked, and Expense mutations are included in the financial audit trail.
+
+## Payout Expense accounting
+
+Payout net amount is constrained as `max(gross_amount - muppu_amount - expense_deductions - other_deductions, 0)`. Generalized Expense deductions are stored separately from legacy Muppu and manually supplied other deductions. A prize Expense can be attached only while the payout is `PENDING`; payout preparation re-derives the linked Expense total from `DEDUCTED_FROM_PRIZE` obligations, preventing stale net amounts.
