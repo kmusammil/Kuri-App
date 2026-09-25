@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(127);
+select plan(132);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -982,9 +982,73 @@ select ok(
 select is(
   (select count(*)
    from public.payouts po
-   where po.net_amount <> greatest(po.gross_amount-po.muppu_amount-po.other_deductions,0)),
+   where po.net_amount <> greatest(po.gross_amount-po.muppu_amount-po.expense_deductions-po.other_deductions,0)),
   0::bigint,
   'existing payouts satisfy gross minus deductions net-amount invariant'
+);
+
+-- 102-106: generalized Expense payout integration
+select ok(
+  exists (
+    select 1
+    from information_schema.columns
+    where table_schema='public'
+      and table_name='payouts'
+      and column_name='expense_deductions'
+      and data_type='bigint'
+      and is_nullable='NO'
+  ),
+  'payouts expose a dedicated generalized Expense deduction component'
+);
+
+select ok(
+  (select count(*)
+   from public.payouts po
+   where po.net_amount <> greatest(
+     po.gross_amount-po.muppu_amount-po.expense_deductions-po.other_deductions,
+     0
+   )),
+  0::bigint,
+  'existing payouts satisfy the generalized gross-minus-all-deductions invariant'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='prepare_payout_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%expense_obligations%'
+      and pg_get_functiondef(p.oid) ilike '%DEDUCTED_FROM_PRIZE%'
+  ),
+  'payout preparation recomputes linked generalized Expense deductions'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='deduct_expense_from_prize_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%expense_deductions=expense_deductions+obligation_amount%'
+      and pg_get_functiondef(p.oid) ilike '%status=''PENDING''%'
+  ),
+  'prize Expense deduction updates only a pending payout'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_constraint
+    where conrelid='public.financial_idempotency_keys'::regclass
+      and conname='financial_idempotency_keys_check'
+      and pg_get_constraintdef(oid) ilike '%PAYOUT_PAYMENT%'
+      and pg_get_constraintdef(oid) ilike '%result_payment_id IS NULL%'
+      and pg_get_constraintdef(oid) ilike '%result_bigint IS NULL%'
+  ),
+  'PAYOUT_PAYMENT completion tracks state without misusing the payment-result foreign key'
 );
 
 -- 102-106: cycle authority and historical immutability
