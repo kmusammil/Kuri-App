@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(76);
+select plan(81);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -875,6 +875,71 @@ select ok(
       and pg_get_functiondef(p.oid) ilike '%FOR UPDATE%'
   ),
   'membership creation retains Kuri row locking for capacity protection'
+);
+
+-- 77-81: Kuri lifecycle explicit timestamp/enrollment contract
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.close_kuri_enrollment_for_admin(uuid)'::regprocedure,
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.close_kuri_enrollment_for_admin(uuid)'::regprocedure,
+    'EXECUTE'
+  ),
+  'Kuri enrollment-close API is authenticated-only'
+);
+
+select ok(
+  exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='kuris'
+      and column_name='actual_started_at'
+  )
+  and exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='kuris'
+      and column_name='enrollment_closed_at'
+  ),
+  'Kuri lifecycle uses explicit enrollment closure and actual-start timestamps'
+);
+
+select ok(
+  exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='kuris'
+      and column_name='completed_at'
+  )
+  and exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='kuris'
+      and column_name='archived_at'
+  ),
+  'Kuri completion and archive timestamps are stored explicitly'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='transition_kuri_status_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%Kuri enrollment must be explicitly closed before the Kuri can start%'
+  ),
+  'Kuri activation contract requires enrollment closure'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='create_membership_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%controlled late-joining workflow%'
+  ),
+  'Kuri enrollment closure does not remove the controlled late-joining path'
 );
 
 select * from finish();
