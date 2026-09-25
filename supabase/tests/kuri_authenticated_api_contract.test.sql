@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(61);
+select plan(66);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -698,6 +698,74 @@ select ok(
       and pg_get_functiondef(p.oid) ilike '%FOR UPDATE%'
   ),
   'winner finalization retains row-level concurrency locking'
+);
+
+-- 62-66: payout authority and idempotency contract
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.mark_payout_paid_for_admin(uuid,timestamptz,public.payment_method,text,text,text,bigint)'::regprocedure,
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.mark_payout_paid_for_admin(uuid,timestamptz,public.payment_method,text,text,text,bigint)'::regprocedure,
+    'EXECUTE'
+  ),
+  'payout payment API is authenticated-only with the idempotent signature'
+);
+
+select is(
+  (select count(*)
+   from pg_proc p
+   join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'transition_payout_status_for_admin',
+       'prepare_payout_for_admin',
+       'get_payout_for_admin',
+       'list_payouts_for_admin',
+       'mark_payout_paid_for_admin'
+     )
+     and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'),
+  5::bigint,
+  'all payout APIs authorize through Kuri authority'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='mark_payout_paid_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%financial_idempotency_keys%'
+      and pg_get_functiondef(p.oid) ilike '%PAYOUT_PAYMENT%'
+  ),
+  'payout payment API uses idempotency and Kuri authority'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_constraint
+    where conrelid='public.financial_idempotency_keys'::regclass
+      and pg_get_constraintdef(oid) ilike '%PAYOUT_PAYMENT%'
+  ),
+  'payout payment idempotency operation type is allowed'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='mark_payout_paid_for_admin'
+      and p.proconfig is not null
+      and exists(select 1 from unnest(p.proconfig) cfg where cfg='search_path=public')
+  ),
+  'payout payment API has fixed SECURITY DEFINER search_path'
 );
 
 select * from finish();
