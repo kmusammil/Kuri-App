@@ -94,7 +94,7 @@ describe('Kuri-App draw eligibility and winner invariants', () => {
     expect(cycle1).toBeTruthy()
     expect(cycle2).toBeTruthy()
 
-    const setCycleState = async (cycleId: string, status: 'OPEN' | 'PAYMENT_CLOSED' | 'DRAW_PENDING') => {
+    const setCycleState = async (cycleId: string) => {
       for (const target of ['OPEN', 'PAYMENT_CLOSED', 'DRAW_PENDING'] as const) {
         const { error } = await adminA.rpc('transition_cycle_status_for_admin', {
           target_cycle_id: cycleId,
@@ -102,10 +102,9 @@ describe('Kuri-App draw eligibility and winner invariants', () => {
         })
         expect(error).toBeNull()
       }
-      expect(status).toBe('DRAW_PENDING')
     }
 
-    await setCycleState(cycle1.id, 'DRAW_PENDING')
+    await setCycleState(cycle1.id)
 
     const listInstallments = async (cycleId: string) => {
       const { data, error } = await adminA.rpc('list_installments_for_cycle_admin', {
@@ -117,10 +116,14 @@ describe('Kuri-App draw eligibility and winner invariants', () => {
 
     const cycle1Installments = await listInstallments(cycle1.id)
 
-    const payAndAllocate = async (membershipId: string, installmentId: string, label: string) => {
+    const payAndAllocate = async (
+      personId: string,
+      installmentId: string,
+      label: string,
+    ) => {
       const { data: payment, error: paymentError } = await adminA.rpc('create_payment_for_admin', {
         target_kuri_id: kuriId,
-        target_person_id: membershipId === membershipA ? env('TEST_PERSON_A_ID') : env('TEST_PERSON_B_ID'),
+        target_person_id: personId,
         payment_amount: 100,
         payment_date: new Date().toISOString(),
         payment_method: 'CASH',
@@ -147,9 +150,9 @@ describe('Kuri-App draw eligibility and winner invariants', () => {
     expect(i1a).toBeTruthy()
     expect(i1b).toBeTruthy()
 
-    await Promise.all([
-      payAndAllocate(membershipA, i1a.id, `DRAW-${suffix}-A1`),
-      payAndAllocate(membershipB, i1b.id, `DRAW-${suffix}-B1`),
+    const [paymentA1, paymentB1] = await Promise.all([
+      payAndAllocate(env('TEST_PERSON_A_ID'), i1a.id, `DRAW-${suffix}-A1`),
+      payAndAllocate(env('TEST_PERSON_B_ID'), i1b.id, `DRAW-${suffix}-B1`),
     ])
 
     const prepareAttempts = await Promise.all([
@@ -171,16 +174,16 @@ describe('Kuri-App draw eligibility and winner invariants', () => {
     expect(poolB?.system_eligible).toBe(true)
     expect(poolB?.admin_included).toBe(true)
 
-    const paymentB1 = await adminA.rpc('list_payment_allocations_for_admin', {
-      target_payment_id: (await adminA.rpc('list_payments_for_admin', { target_kuri_id: kuriId })).data
-        .find((row: { reference_number: string }) => row.reference_number === `DRAW-${suffix}-B1`).id,
-    })
-    expect(paymentB1.error).toBeNull()
-    const allocationB1 = paymentB1.data[0]
+    const { data: paymentB1Allocations, error: paymentB1AllocationError } =
+      await adminA.rpc('list_payment_allocations_for_admin', {
+        target_payment_id: paymentB1,
+      })
+    expect(paymentB1AllocationError).toBeNull()
+    expect(paymentB1Allocations).toHaveLength(1)
+    const allocationB1 = paymentB1Allocations[0]
 
     const reversal = await adminA.rpc('create_payment_reversal_request_for_admin', {
-      target_payment_id: (await adminA.rpc('list_payments_for_admin', { target_kuri_id: kuriId })).data
-        .find((row: { reference_number: string }) => row.reference_number === `DRAW-${suffix}-B1`).id,
+      target_payment_id: paymentB1,
       reversal_amount: 100,
       target_allocation_id: allocationB1.id,
       reason: 'Test eligibility freeze after POOL_READY',
@@ -250,7 +253,7 @@ describe('Kuri-App draw eligibility and winner invariants', () => {
     const winnerForCycle2 = winner
     const otherForCycle2 = losingMembership
 
-    await setCycleState(cycle2.id, 'DRAW_PENDING')
+    await setCycleState(cycle2.id)
 
     const cycle2Installments = await listInstallments(cycle2.id)
     const i2winner = cycle2Installments.find((row) => row.membership_id === winnerForCycle2)
@@ -259,8 +262,8 @@ describe('Kuri-App draw eligibility and winner invariants', () => {
     expect(i2other).toBeTruthy()
 
     await Promise.all([
-      payAndAllocate(winnerForCycle2, i2winner.id, `DRAW-${suffix}-A2`),
-      payAndAllocate(otherForCycle2, i2other.id, `DRAW-${suffix}-B2`),
+      payAndAllocate(winnerForCycle2 === membershipA ? env('TEST_PERSON_A_ID') : env('TEST_PERSON_B_ID'), i2winner.id, `DRAW-${suffix}-A2`),
+      payAndAllocate(otherForCycle2 === membershipA ? env('TEST_PERSON_A_ID') : env('TEST_PERSON_B_ID'), i2other.id, `DRAW-${suffix}-B2`),
     ])
 
     const prepared2 = await adminA.rpc('prepare_draw_for_admin', { target_cycle_id: cycle2.id })
