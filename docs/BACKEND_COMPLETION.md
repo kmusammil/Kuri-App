@@ -11,13 +11,13 @@ The database/API layer is now considered the backend contract for the applicatio
 ## Completed
 
 - Multi-tenant organization boundaries and authorization.
-- RLS on all 28 public tables.
+- RLS on all 31 public tables.
 - Authenticated PostgREST RPC/API surface with anonymous RPC exposure removed.
 - SECURITY DEFINER functions reviewed and hardened with fixed search paths.
 - Kuri, cycle, draw, membership, exit, payout, and settlement state machines.
 - Draw eligibility, winner, and membership invariants.
 - Draw and payout concurrency protection.
-- Payment and installment allocation integrity currently has clean live data; payment creation/allocation now have authenticated idempotency/replay protection. Oldest-first/no-skipping, advance-payment handling, and correction/reversal remain ledger work.
+- Payment and installment allocation integrity currently has clean live data; payment creation/allocation now have authenticated idempotency/replay protection; payment correction/reversal is append-only and approval-gated. Oldest-first/no-skipping and advance-payment handling remain ledger work.
 - Payout and Muppu accounting invariants.
 - Membership exit/refund/death-settlement flows.
 - Nominee tenancy and access controls.
@@ -25,20 +25,21 @@ The database/API layer is now considered the backend contract for the applicatio
 - Financial audit trail.
 - Domain identity immutability.
 - Cross-domain tenant and financial integrity checks.
-- Authenticated API contract suite is maintained alongside the live API surface; current branch plan is 33 tests.
+- Authenticated API contract suite is maintained alongside the live API surface; the branch test plans are updated for the current 2026-09-25 API surface.
 - Positive authenticated workflow and concurrency coverage completed.
 - Disposable positive E2E fixtures cleaned from the test organization.
 - Canonical backend API documentation.
 - Explicit organization type/context foundation.
 - Kuri-scoped MAIN_ADMIN/ADMIN authority foundation.
 - Payment-operation idempotency for payment creation and allocation, with request-hash replay protection.
+- Payment correction/reversal requests with REQUESTED -> APPROVED -> EXECUTED or REQUESTED -> REJECTED, append-only financial entries, required reasons, and audit events.
 - Invitation and join-request workflow with single-use codes, expiry/revocation, explicit approval/rejection, and audit events.
 
 ## Final live verification
 
-- Public tables: 28
-- Public tables with RLS: 28
-- Authenticated SECURITY DEFINER application APIs: 77, intentionally exposed
+- Public tables: 31
+- Public tables with RLS: 31
+- Authenticated SECURITY DEFINER application APIs: 84, intentionally exposed
 - Anonymous SECURITY DEFINER APIs: 0
 - SECURITY DEFINER functions without fixed search_path: 0
 - Authenticated lifecycle transition RPCs: 3
@@ -69,4 +70,4 @@ The same backend can serve the web, Android, iOS, and desktop clients.
 
 ## 2026-09-25 update checkpoint
 
-Migration `20260925072540_identity_organization_authority_v1` was applied to the production project and establishes explicit organization type/context plus Kuri-scoped admin authority. Existing Kuris then received an audited legacy MAIN_ADMIN recovery via `kuri_admin_legacy_recovery_v1`; no historical creator was invented. Payment APIs were subsequently moved from organization-wide authorization to explicit Kuri scope in `20260925080606_payment_kuri_authority_v1`. Payment idempotency/correction/reversal and allocation policy hardening remain pending ledger work.
+Migration `20260925072540_identity_organization_authority_v1` was applied to the production project and establishes explicit organization type/context plus Kuri-scoped admin authority. Existing Kuris then received an audited legacy MAIN_ADMIN recovery via `kuri_admin_legacy_recovery_v1`; no historical creator was invented. Payment APIs were subsequently moved from organization-wide authorization to explicit Kuri scope in `20260925080606_payment_kuri_authority_v1`. Payment correction/reversal is now implemented and recorded in `20260925082608_payment_correction_reversal_v1`. Oldest-first/no-skipping and advance-payment allocation policy remain pending ledger work.
