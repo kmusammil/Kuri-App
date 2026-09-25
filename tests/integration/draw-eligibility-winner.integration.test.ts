@@ -129,7 +129,7 @@ describe('Kuri-App draw eligibility and winner invariants', () => {
         payment_method: 'CASH',
         payment_reference: label,
         payment_notes: 'Disposable draw invariant fixture',
-        idempotency_key: `${label}-CREATE`,
+        p_idempotency_key: `${label}-CREATE`,
       })
       expect(paymentError).toBeNull()
       expect(payment).toBeTruthy()
@@ -138,7 +138,7 @@ describe('Kuri-App draw eligibility and winner invariants', () => {
         target_payment_id: payment,
         target_installment_id: installmentId,
         allocation_amount: 100,
-        idempotency_key: `${label}-ALLOC`,
+        p_idempotency_key: `${label}-ALLOC`,
       })
       expect(allocationError).toBeNull()
       expect(paid).toBe(100)
