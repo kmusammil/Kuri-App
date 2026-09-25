@@ -85,9 +85,9 @@ Lifecycle state changes are exposed through the authenticated transition RPCs ab
 - set_draw_pool_entry_for_admin(uuid,boolean,text) -> void — Kuri-scoped pool override while `POOL_READY`; including a system-ineligible snapshot entry requires a reason.
 - get_draw_session_for_admin(uuid) -> setof record
 - list_draw_pool_for_admin(uuid) -> setof record
-- run_random_draw_for_admin(uuid,integer) -> setof record — consumes the frozen `POOL_READY` snapshot; later installment/member changes do not silently recalculate eligibility.
+- run_random_draw_for_admin(uuid,integer,text) -> setof record — requires an idempotency key, consumes the frozen `POOL_READY` snapshot, and returns the stored selection set on a completed retry; later installment/member changes do not silently recalculate eligibility. The legacy 2-argument overload is removed.
 - get_draw_selections_for_admin(uuid) -> setof record
-- finalize_draw_for_admin(uuid,uuid[]) -> integer — final selection must come from current draw selections, must contain distinct persons, cannot repeat a prior winner in the Kuri, and is bounded by `Maximum winners = M - (C - 1)`.
+- finalize_draw_for_admin(uuid,uuid[],text) -> integer — requires an idempotency key; completed retries return the existing winner count, while a reused key with a different winner payload is rejected. Final selection must come from current draw selections, must contain distinct persons, cannot repeat a prior winner in the Kuri, and is bounded by `Maximum winners = M - (C - 1)`. The legacy 2-argument overload is removed.
 - get_monthly_winners_for_admin(uuid) -> setof record
 
 ### Payouts and Muppu
@@ -153,7 +153,7 @@ At the current 2026-09-25 ledger-update checkpoint:
 - existing Kuri records have Kuri-level MAIN_ADMIN recovery rows
 - payment admin APIs are now Kuri-scoped in migration `20260925080606_payment_kuri_authority_v1`
 - payment create/allocation retries are idempotent through `financial_idempotency_keys`
-- draw preparation/finalization now have explicit race-safety and winner-invariant coverage; draw eligibility is snapshot-frozen at `POOL_READY`
+- draw preparation/finalization now have explicit race-safety and winner-invariant coverage; draw eligibility is snapshot-frozen at `POOL_READY`; draw execution and finalization require idempotency keys with request-hash replay protection
 - payout preparation/payment now use Kuri-scoped authority, row locking, and `financial_idempotency_keys` for payout-payment replay protection
 - cycle generation/reads/transitions now use Kuri authority, row locking, and terminal-cycle schedule immutability
 - payment allocation invariant checks and a real parallel-session race test are maintained in the DB regression/integration suites
