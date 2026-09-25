@@ -17,7 +17,7 @@ The database/API layer is now considered the backend contract for the applicatio
 - Kuri, cycle, draw, membership, exit, payout, and settlement state machines.
 - Draw eligibility, winner, and membership invariants.
 - Draw and payout concurrency protection.
-- Payment and installment allocation integrity currently has clean live data; payment creation/allocation now have authenticated idempotency/replay protection; payment correction/reversal is append-only and approval-gated. Oldest-first/no-skipping and advance-payment handling remain ledger work.
+- Payment and installment allocation integrity currently has clean live data; payment creation/allocation now have authenticated idempotency/replay protection; payment correction/reversal is append-only and approval-gated; allocation now enforces no-skipping and supports deterministic oldest-first advance-payment allocation.
 - Payout and Muppu accounting invariants.
 - Membership exit/refund/death-settlement flows.
 - Nominee tenancy and access controls.
@@ -39,7 +39,7 @@ The database/API layer is now considered the backend contract for the applicatio
 
 - Public tables: 31
 - Public tables with RLS: 31
-- Authenticated SECURITY DEFINER application APIs: 84, intentionally exposed
+- Authenticated SECURITY DEFINER application APIs: 85, intentionally exposed
 - Anonymous SECURITY DEFINER APIs: 0
 - SECURITY DEFINER functions without fixed search_path: 0
 - Authenticated lifecycle transition RPCs: 3
@@ -70,4 +70,4 @@ The same backend can serve the web, Android, iOS, and desktop clients.
 
 ## 2026-09-25 update checkpoint
 
-Migration `20260925072540_identity_organization_authority_v1` was applied to the production project and establishes explicit organization type/context plus Kuri-scoped admin authority. Existing Kuris then received an audited legacy MAIN_ADMIN recovery via `kuri_admin_legacy_recovery_v1`; no historical creator was invented. Payment APIs were subsequently moved from organization-wide authorization to explicit Kuri scope in `20260925080606_payment_kuri_authority_v1`. Payment correction/reversal is now implemented and recorded in `20260925082608_payment_correction_reversal_v1`. Oldest-first/no-skipping and advance-payment allocation policy remain pending ledger work.
+Migration `20260925072540_identity_organization_authority_v1` was applied to the production project and establishes explicit organization type/context plus Kuri-scoped admin authority. Existing Kuris then received an audited legacy MAIN_ADMIN recovery via `kuri_admin_legacy_recovery_v1`; no historical creator was invented. Payment APIs were subsequently moved from organization-wide authorization to explicit Kuri scope in `20260925080606_payment_kuri_authority_v1`. Payment correction/reversal is implemented in `20260925082608_payment_correction_reversal_v1`; allocation policy is implemented in `20260925083209` + `20260925083456`. The remaining payment-policy work is allocation invariant/concurrency coverage.
