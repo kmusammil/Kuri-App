@@ -176,3 +176,23 @@ Existing completed/cancelled cycle history is not recreated for new per-cycle ru
 ## Payout Expense accounting
 
 Payout net amount is constrained as `max(gross_amount - muppu_amount - expense_deductions - other_deductions, 0)`. Generalized Expense deductions are stored separately from legacy Muppu and manually supplied other deductions. A prize Expense can be attached only while the payout is `PENDING`; payout preparation re-derives the linked Expense total from `DEDUCTED_FROM_PRIZE` obligations, preventing stale net amounts.
+
+
+
+## Membership exit, death settlement, and succession
+
+Exit lifecycle: `ACTIVE/SUSPENDED -> PENDING -> APPROVED -> SETTLED -> EXITED`. Creating an exit request does not make the membership exited; pending members remain operational. Cancellation preserves the historical exit row and allows a later request. Exit settlement recalculates financials from effective payment/allocation values.
+
+Canonical mutation APIs:
+- `create_membership_exit_for_admin(membership_id, reason, exit_date, refund_policy, refund_amount, notes, idempotency_key)`
+- `approve_membership_exit_for_admin(exit_id)`
+- `verify_death_date_for_admin(exit_id, verified_death_date, verification_notes)`
+- `cancel_membership_exit_for_admin(exit_id, cancellation_reason)`
+- `record_membership_exit_refund_for_admin(exit_id, refund_amount, payment_method, reference, paid_at, notes, idempotency_key)`
+- `settle_membership_exit_for_admin(exit_id, settlement_method, reference, settlement_date, idempotency_key)`
+- `record_death_settlement_for_admin(exit_id, nominee_id, settlement_notes, idempotency_key)`
+- `create_membership_succession_for_admin(exit_id, nominee_id, succession_notes)`
+
+Death settlement requires a verified death date and a nominee registered to the original member. Payments after the verified death date are excluded from the death settlement path. Succession is append-only: the original `person_id` and membership number remain unchanged; `current_holder_person_id` identifies the successor for ongoing operations.
+
+Operational APIs use `coalesce(current_holder_person_id, person_id)` after succession, so successor payments/installments/draw identity follow the current holder while historical membership identity remains intact.
