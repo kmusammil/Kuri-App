@@ -258,6 +258,7 @@ describe('Kuri-App authenticated API boundary', () => {
       target_refund_policy: 'IMMEDIATE',
       target_refund_amount: 0,
       target_notes: 'Must be rejected.',
+      p_idempotency_key: 'AUTH-UNKNOWN-EXIT',
     })
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
