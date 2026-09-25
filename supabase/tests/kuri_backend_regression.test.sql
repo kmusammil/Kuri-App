@@ -1563,6 +1563,141 @@ select ok(
   'exit/death/succession APIs use Kuri-scoped authority'
 );
 
+
+
+-- 147-161: final exit/death/succession security and financial assertions
+select ok(
+  exists(select 1 from information_schema.columns where table_schema='public' and table_name='membership_exits' and column_name='death_date'),
+  'verified death cases have a distinct death date field'
+);
+
+select ok(
+  exists(select 1 from information_schema.columns where table_schema='public' and table_name='nominees' and column_name='successor_person_id')
+  and exists(select 1 from information_schema.columns where table_schema='public' and table_name='memberships' and column_name='current_holder_person_id'),
+  'nominees and memberships carry explicit succession identity'
+);
+
+select ok(
+  exists(select 1 from pg_index where indexrelid='public.membership_successions_one_per_membership'::regclass and indisunique)
+  and exists(select 1 from pg_index where indexrelid='public.membership_successions_one_per_exit'::regclass and indisunique),
+  'succession is one-to-one with the membership and settled death case'
+);
+
+select is(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_membership_exit_for_admin','approve_membership_exit_for_admin',
+       'record_membership_exit_refund_for_admin','verify_death_date_for_admin',
+       'record_death_settlement_for_admin','settle_membership_exit_for_admin',
+       'link_nominee_to_successor_person_for_admin','record_membership_succession_for_admin'
+     )
+     and has_function_privilege('anon',p.oid,'EXECUTE')),
+  0::bigint,
+  'exit/death/succession mutation functions are anonymous-disabled'
+);
+
+select is(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_membership_exit_for_admin','approve_membership_exit_for_admin',
+       'record_membership_exit_refund_for_admin','verify_death_date_for_admin',
+       'record_death_settlement_for_admin','settle_membership_exit_for_admin',
+       'link_nominee_to_successor_person_for_admin','record_membership_succession_for_admin'
+     )
+     and p.proconfig @> ARRAY['search_path=public']),
+  0::bigint,
+  'exit/death/succession SECURITY DEFINER mutations have a fixed search_path'
+);
+
+select is(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_membership_exit_for_admin','list_membership_exits_for_admin',
+       'get_membership_exit_membership_id_for_admin','get_membership_exit_reconciliation_for_admin',
+       'approve_membership_exit_for_admin','transition_membership_exit_status_for_admin',
+       'record_membership_exit_refund_for_admin','verify_death_date_for_admin',
+       'get_death_settlement_context_for_admin','record_death_settlement_for_admin',
+       'settle_membership_exit_for_admin','create_nominee_for_admin',
+       'update_nominee_for_admin','delete_nominee_for_admin','list_nominees_for_admin',
+       'get_membership_nominees_for_admin','link_nominee_to_successor_person_for_admin',
+       'record_membership_succession_for_admin'
+     )
+     and pg_get_functiondef(p.oid) ilike '%organization_users%'),
+  0::bigint,
+  'exit/death/nominee/succession APIs do not contain direct organization authority checks'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='create_membership_exit_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%calculate_membership_exit_financials%'),
+  'exit creation derives contribution and settlement from the authoritative calculator'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='approve_membership_exit_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%calculate_membership_exit_financials%'),
+  'exit approval rechecks financial settlement instead of trusting stale stored totals'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='record_membership_exit_refund_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%remaining approved refund balance%'),
+  'refund execution cannot exceed the remaining calculated balance'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='verify_death_date_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%cannot be changed%'
+      and pg_get_functiondef(p.oid) ilike '%cannot be after the exit date%'),
+  'death-date verification is bounded and immutable'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='record_death_settlement_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%DEATH_SETTLEMENT%'
+      and pg_get_functiondef(p.oid) ilike '%Selected nominee does not belong to this person%'
+      and pg_get_functiondef(p.oid) ilike '%death_date_verified_at%'),
+  'death settlement is tied to a verified death and registered nominee'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='record_membership_succession_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%membership_successions%'
+      and pg_get_functiondef(p.oid) ilike '%successor_person_id%'
+      and pg_get_functiondef(p.oid) ilike '%settled%'),
+  'succession requires a settled death and linked successor'
+);
+
+select ok(
+  exists(select 1 from pg_trigger where tgrelid='public.memberships'::regclass and tgname='membership_current_holder_identity_guard'),
+  'current holder changes are protected by a database trigger'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='prepare_draw_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%death_date_verified_at%'),
+  'draw preparation evaluates verified-death eligibility'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='sync_expense_obligations_for_membership'
+      and pg_get_functiondef(p.oid) ilike '%PENDING%')
+  and exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='cancel_membership_exit_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_membership%'),
+  'Expense synchronization stops at exit request and resumes after cancellation'
+);
 select * from finish();
 
 rollback;
