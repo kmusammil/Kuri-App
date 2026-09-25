@@ -135,3 +135,15 @@ Four production migrations are retained as exact historical entries for the gene
 - `20260925114858_payout_payment_idempotency_result_fix_v5` — fixes the payout idempotency completion result shape so `PAYOUT_PAYMENT` does not misuse the payment-result foreign key.
 
 The disposable authenticated end-to-end payout/Expense verification passed and rolled back completely. Existing historical Muppu records and payout rows were preserved.
+
+
+
+## Membership exit, death settlement, succession (2026-09-25)
+
+- `20260925140500_membership_exit_death_succession_schema_v1` — adds exit request/death verification timestamps, current-holder identity, append-only succession records, refund transaction support for partial/multiple refunds, identity triggers, and idempotency result references.
+- `20260925140620_membership_exit_financial_calculation_v2` — calculates exit settlement from effective payment/allocation values with pre-win/post-win and death/request cutoff semantics.
+- `20260925140700_membership_exit_death_workflows_v1` — Kuri-scopes exit/death mutation and read workflows, requires verified death dates, protects cancellation/settlement transitions, and keeps transition helpers internal.
+- `20260925140710_membership_exit_list_authority_v1` — makes exit listing Kuri-scoped and returns a stable admin projection.
+- `20260925140800_membership_succession_workflow_v1` — records nominee-based succession, preserves membership number/original person, and activates a separate current holder.
+- `20260925140900_current_holder_operational_integrations_v1` — routes payment, installment, membership-list, and draw identity resolution through the current holder after succession.
+- `20260925141000_membership_exit_idempotency_contract_fix_v1` — removes legacy short exit/death mutation overloads; canonical mutation APIs require explicit idempotency keys.
