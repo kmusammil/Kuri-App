@@ -93,3 +93,8 @@ Cycle generation, schedule generation, cycle reads, and cycle status transitions
 ## 2026-09-25 membership/enrollment hardening update
 
 Membership creation, membership reads, membership status transitions, and the membership picker now authorize through Kuri administration. Membership creation continues to lock the Kuri row for capacity enforcement. The implementation adopts the ledger-required non-retroactive late-join policy because the source ledger does not define a separate catch-up vocabulary: new memberships receive installments only for non-terminal cycles, while `COMPLETED` and `CANCELLED` cycle history is not recreated. Schedule generation follows the same rule. Live rollback verification confirmed no terminal-cycle installment creation and no test residue.
+
+
+## 2026-09-25 Kuri lifecycle update
+
+The Kuri lifecycle now records the distinction between planned and actual lifecycle events. `start_date` remains the planned date; `actual_started_at`, `enrollment_closed_at`, `completed_at`, and `archived_at` record explicit operational events. A dedicated authenticated enrollment-close API is available while the Kuri is `OPEN`, and transition to `ACTIVE` requires that closure. Existing Kuri history was not backfilled with invented timestamps.
