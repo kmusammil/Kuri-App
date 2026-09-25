@@ -116,3 +116,8 @@ The rollback-only live verification passed one-time and per-cycle obligation fan
 Generalized Expense deductions are now integrated into payout accounting as a dedicated `payouts.expense_deductions` component. The payout invariant is `max(gross - Muppu - Expense deductions - other deductions, 0)`. Prize deductions are allowed only against pending payouts for the same Kuri and person; payout preparation re-derives linked `DEDUCTED_FROM_PRIZE` obligations, and payout payment recalculates the same value before moving the payout to `PAID`.
 
 The live disposable end-to-end verification passed payout preparation, Expense prize deduction, re-preparation preservation, final net calculation with other deductions, same-key payout-payment replay, and same-key/different-payload rejection. The transaction was rolled back. Existing fixture payout state remains unchanged.
+
+
+### Membership exit / death / succession checkpoint — 2026-09-25
+
+Kuri-scoped exit/death/succession workflows are hardened. Exit requests remain operational until settlement, death cases require verified dates and nominee validation, effective financial values are used for settlement, partial refunds reconcile before final EXITED state, and succession preserves the original member identity and membership number while assigning a separate current holder. Operational payment/installment/draw APIs follow the current holder after succession.
