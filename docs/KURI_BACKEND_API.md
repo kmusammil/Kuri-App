@@ -88,7 +88,7 @@ Lifecycle state changes are exposed through the authenticated transition RPCs ab
 
 ### Payouts and Muppu
 - prepare_payout_for_admin(uuid) -> uuid
-- mark_payout_paid_for_admin(uuid,timestamptz,payment_method,text,text,bigint) -> void
+- mark_payout_paid_for_admin(uuid,timestamptz,payment_method,text,text,text,bigint) -> void — Kuri-scoped payout payment with required idempotency key; retries of the same request replay safely, while the same key with a different payload is rejected.
 - get_payout_for_admin(uuid) -> setof record
 - list_payouts_for_admin(uuid) -> setof record
 - audit_financial_ledger_for_admin(uuid) -> setof record — explicit Kuri scope.
@@ -149,6 +149,7 @@ At the current 2026-09-25 ledger-update checkpoint:
 - payment admin APIs are now Kuri-scoped in migration `20260925080606_payment_kuri_authority_v1`
 - payment create/allocation retries are idempotent through `financial_idempotency_keys`
 - draw preparation/finalization now have explicit race-safety and winner-invariant coverage; draw eligibility is snapshot-frozen at `POOL_READY`
+- payout preparation/payment now use Kuri-scoped authority, row locking, and `financial_idempotency_keys` for payout-payment replay protection
 - payment allocation invariant checks and a real parallel-session race test are maintained in the DB regression/integration suites
 
 Frontend clients should call this API through the Supabase client rather than writing directly to protected domain tables.
