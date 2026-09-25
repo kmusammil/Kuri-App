@@ -389,7 +389,7 @@ select ok(
 select ok(
   has_function_privilege(
     'authenticated',
-    'public.create_payment_for_admin(uuid,uuid,bigint,timestamptz,public.payment_method,text,text)'::regprocedure,
+    'public.create_payment_for_admin(uuid,uuid,bigint,timestamptz,public.payment_method,text,text,text)'::regprocedure,
     'EXECUTE'
   )
   and has_function_privilege(
@@ -399,12 +399,12 @@ select ok(
   )
   and has_function_privilege(
     'authenticated',
-    'public.allocate_payment_for_admin(uuid,uuid,bigint)'::regprocedure,
+    'public.allocate_payment_for_admin(uuid,uuid,bigint,text)'::regprocedure,
     'EXECUTE'
   )
   and not has_function_privilege(
     'anon',
-    'public.create_payment_for_admin(uuid,uuid,bigint,timestamptz,public.payment_method,text,text)'::regprocedure,
+    'public.create_payment_for_admin(uuid,uuid,bigint,timestamptz,public.payment_method,text,text,text)'::regprocedure,
     'EXECUTE'
   ),
   'Kuri-scoped payment mutation/read APIs are authenticated-only'
