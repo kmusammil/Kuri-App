@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(24);
+select plan(27);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -53,8 +53,8 @@ select is(
    where n.nspname = 'public'
      and p.prosecdef
      and has_function_privilege('authenticated', p.oid, 'EXECUTE')),
-  65::bigint,
-  'authenticated SECURITY DEFINER API surface includes the reviewed lifecycle APIs'
+  70::bigint,
+  'authenticated SECURITY DEFINER API surface includes the reviewed APIs plus explicit organization context'
 );
 
 -- 4. Every exposed SECURITY DEFINER function has an explicit search_path.
@@ -73,6 +73,27 @@ select is(
           ))),
   0::bigint,
   'every exposed SECURITY DEFINER function has fixed search_path'
+);
+
+-- 5-7. Explicit organization/Kuri context APIs are exposed without anonymous access.
+select ok(
+  has_function_privilege('authenticated','public.list_my_organizations()'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.list_my_organizations()'::regprocedure,'EXECUTE')
+  and has_function_privilege('authenticated','public.get_organization_role(uuid)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.get_organization_role(uuid)'::regprocedure,'EXECUTE'),
+  'organization context APIs are authenticated-only'
+);
+
+select ok(
+  has_function_privilege('authenticated','public.create_organization_for_user(text,organization_type,text,text,text,text)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.create_organization_for_user(text,organization_type,text,text,text,text)'::regprocedure,'EXECUTE'),
+  'organization creation API is authenticated-only'
+);
+
+select ok(
+  has_function_privilege('authenticated','public.create_kuri_for_organization_admin(uuid,text,text,date,integer,integer,bigint,integer,integer,bigint,bigint,text,refund_policy)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.create_kuri_for_organization_admin(uuid,text,text,date,integer,integer,bigint,integer,integer,bigint,bigint,text,refund_policy)'::regprocedure,'EXECUTE'),
+  'organization-scoped Kuri creation API is authenticated-only'
 );
 
 -- 5. Lifecycle transition RPCs are intentionally client-callable and remain protected by the reviewed API surface.
