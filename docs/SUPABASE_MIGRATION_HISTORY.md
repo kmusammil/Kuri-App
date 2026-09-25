@@ -103,3 +103,8 @@ Two production migrations were applied and retained:
 - `20260925091243_membership_late_join_policy_parameter_fix_v2` — corrects a `due_date` variable/column ambiguity in schedule-generation installment creation by using explicit variable names and qualified cycle columns.
 
 No production migration-history rows were rewritten.
+
+
+## 2026-09-25 Kuri lifecycle explicit timestamps
+
+Migration `20260925091456_kuri_lifecycle_explicit_timestamps_and_enrollment_v1` records explicit Kuri lifecycle event timestamps and introduces the authenticated enrollment-close operation. Activation requires enrollment closure; existing historical rows are not artificially backfilled. The migration was verified in a rollback-only lifecycle workflow through enrollment close, activation, cycle completion, Kuri completion, and archive.
