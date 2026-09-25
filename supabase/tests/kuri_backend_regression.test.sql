@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(125);
+select plan(116);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -1203,24 +1203,16 @@ select ok(
   'Kuri lifecycle status guard remains trigger-protected'
 );
 
--- 120-125: draw operation idempotency/replay protection
+-- 120-129: draw operation idempotency/replay protection
 select ok(
-  has_function_privilege(
-    'authenticated',
-    'public.run_random_draw_for_admin(uuid,integer,text)'::regprocedure,
-    'EXECUTE'
-  )
-  and has_function_privilege(
-    'authenticated',
-    'public.finalize_draw_for_admin(uuid,uuid[],text)'::regprocedure,
-    'EXECUTE'
-  )
-  and not has_function_privilege(
-    'anon',
-    'public.run_random_draw_for_admin(uuid,integer,text)'::regprocedure,
-    'EXECUTE'
-  ),
-  'draw operation idempotency is exposed only to authenticated callers'
+  has_function_privilege('authenticated','public.run_random_draw_for_admin(uuid,integer,text)'::regprocedure,'EXECUTE')
+  and has_function_privilege('authenticated','public.finalize_draw_for_admin(uuid,uuid[],text)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.run_random_draw_for_admin(uuid,integer,text)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.finalize_draw_for_admin(uuid,uuid[],text)'::regprocedure,'EXECUTE')
+  and (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+       where n.nspname='public' and p.proname in ('run_random_draw_for_admin','finalize_draw_for_admin')
+         and p.proconfig @> ARRAY['search_path=public'])=2,
+  'draw operation APIs are authenticated-only and retain a fixed search_path'
 );
 
 select ok(
@@ -1230,36 +1222,69 @@ select ok(
 );
 
 select ok(
-  exists (
-    select 1 from pg_constraint
-    where conrelid='public.financial_idempotency_keys'::regclass
-      and pg_get_constraintdef(oid) ilike '%DRAW_RUN%'
-      and pg_get_constraintdef(oid) ilike '%DRAW_FINALIZE%'
-  ),
-  'financial idempotency ledger allows draw run and draw finalization operations'
+  exists (select 1 from pg_constraint where conrelid='public.financial_idempotency_keys'::regclass
+          and pg_get_constraintdef(oid) ilike '%PAYOUT_PAYMENT%'
+          and pg_get_constraintdef(oid) ilike '%DRAW_RUN%'
+          and pg_get_constraintdef(oid) ilike '%DRAW_FINALIZE%'),
+  'financial idempotency ledger allows payout and draw operations'
 );
 
 select ok(
-  exists (
-    select 1 from pg_proc p
-    join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname='public'
-      and p.proname='run_random_draw_for_admin'
-      and pg_get_functiondef(p.oid) ilike '%financial_idempotency_keys%'
-      and pg_get_functiondef(p.oid) ilike '%completed retry%'
-  ),
-  'random draw retries return the frozen selection set without rerunning randomness'
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='run_random_draw_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%v_actor_user_id%'
+            and pg_get_functiondef(p.oid) ilike '%f.actor_user_id=v_actor_user_id%'
+            and pg_get_functiondef(p.oid) ilike '%request_hash%'),
+  'random draw idempotency uses an unambiguous actor variable and request hash'
 );
 
 select ok(
-  exists (
-    select 1 from pg_proc p
-    join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname='public'
-      and p.proname='finalize_draw_for_admin'
-      and pg_get_functiondef(p.oid) ilike '%PAYOUT%'
-  ) = false,
-  'draw finalization idempotency remains isolated from payout operations'
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='finalize_draw_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%v_actor_user_id%'
+            and pg_get_functiondef(p.oid) ilike '%f.actor_user_id=v_actor_user_id%'
+            and pg_get_functiondef(p.oid) ilike '%request_hash%'),
+  'draw finalization idempotency uses an unambiguous actor variable and request hash'
+);
+
+select ok(
+  exists (select 1 from pg_constraint where conrelid='public.financial_idempotency_keys'::regclass
+          and conname='financial_idempotency_keys_check'
+          and pg_get_constraintdef(oid) ilike '%DRAW_RUN%'
+          and pg_get_constraintdef(oid) ilike '%result_bigint IS NOT NULL%'),
+  'DRAW_RUN completion stores its result as result_bigint'
+);
+
+select ok(
+  exists (select 1 from pg_constraint where conrelid='public.financial_idempotency_keys'::regclass
+          and conname='financial_idempotency_keys_check'
+          and pg_get_constraintdef(oid) ilike '%DRAW_FINALIZE%'
+          and pg_get_constraintdef(oid) ilike '%result_bigint IS NOT NULL%'),
+  'DRAW_FINALIZE completion stores its result as result_bigint'
+);
+
+select ok(
+  exists (select 1 from pg_constraint where conrelid='public.financial_idempotency_keys'::regclass
+          and conname='financial_idempotency_keys_check'
+          and pg_get_constraintdef(oid) ilike '%PAYOUT_PAYMENT%'
+          and pg_get_constraintdef(oid) ilike '%result_payment_id IS NOT NULL%'),
+  'PAYOUT_PAYMENT completion retains the payment-result invariant'
+);
+
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='run_random_draw_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%IF idem_row.status=''COMPLETED''%'
+            and pg_get_functiondef(p.oid) ilike '%FROM public.draw_selections%'),
+  'random draw completed retries return the stored selection set'
+);
+
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='finalize_draw_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%IF idem_row.status=''COMPLETED''%'
+            and pg_get_functiondef(p.oid) ilike '%FROM public.monthly_winners%'),
+  'draw finalization completed retries return the existing winner count'
 );
 
 select * from finish();
