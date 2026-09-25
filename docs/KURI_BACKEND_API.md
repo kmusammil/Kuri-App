@@ -40,7 +40,7 @@ The RLS/security helpers has_org_role(uuid, app_role[]) and is_org_member(uuid) 
 - create_kuri_for_organization_admin(uuid,text,text,date,integer,integer,bigint,integer,integer,bigint,bigint,text,refund_policy) -> uuid — explicit organization-scoped Kuri creation.
 - get_kuri_for_admin(uuid) -> record
 - list_kuris_for_admin() -> setof record
-- generate_cycles_for_admin(uuid) -> integer — Kuri-scoped schedule generation; existing `COMPLETED`/`CANCELLED` cycle dates are not rewritten.
+- generate_cycles_for_admin(uuid) -> integer — Kuri-scoped; terminal cycles are not rewritten and missing installments are not created for terminal cycles. — Kuri-scoped schedule generation; existing `COMPLETED`/`CANCELLED` cycle dates are not rewritten.
 - generate_kuri_schedule_for_admin(uuid) -> integer — Kuri-scoped schedule generation; existing cycle rows are preserved.
 - get_cycle_for_admin(uuid) -> record — Kuri-scoped cycle read.
 - list_cycles_for_admin(uuid) -> setof record — Kuri-scoped cycle list.
@@ -52,11 +52,11 @@ Lifecycle state changes are exposed through the authenticated transition RPCs ab
 - create_person_for_org_admin(uuid,text,text,text,text,text,text) -> uuid
 - get_person_for_admin(uuid) -> record
 - list_people_for_admin() -> setof record
-- list_people_available_for_membership(uuid) -> setof record
+- list_people_available_for_membership(uuid) -> setof record — Kuri-scoped membership picker.
 
 ### Memberships
-- create_membership_for_admin(uuid,uuid,text) -> uuid
-- list_memberships_for_admin(uuid) -> setof record
+- create_membership_for_admin(uuid,uuid,text) -> uuid — Kuri-scoped membership creation with Kuri-row capacity locking; the late-join policy creates installments only for non-terminal cycles.
+- list_memberships_for_admin(uuid) -> setof record — Kuri-scoped membership read.
 
 ### Payments and installments
 - create_payment_for_admin(uuid,uuid,bigint,timestamptz,payment_method,text,text,text) -> uuid — explicit Kuri scope + person membership check + required idempotency key.
