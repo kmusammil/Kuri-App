@@ -108,3 +108,13 @@ No production migration-history rows were rewritten.
 ## 2026-09-25 Kuri lifecycle explicit timestamps
 
 Migration `20260925091456_kuri_lifecycle_explicit_timestamps_and_enrollment_v1` records explicit Kuri lifecycle event timestamps and introduces the authenticated enrollment-close operation. Activation requires enrollment closure; existing historical rows are not artificially backfilled. The migration was verified in a rollback-only lifecycle workflow through enrollment close, activation, cycle completion, Kuri completion, and archive.
+
+## 2026-09-25 draw idempotency replay hardening
+
+Four production migrations are retained as historical authority for draw replay protection and its live verification repairs:
+- 20260925091823_draw_idempotency_replay_v1 — adds DRAW_RUN and DRAW_FINALIZE idempotency handling to draw execution/finalization.
+- 20260925091832_draw_idempotency_remove_legacy_overloads_v2 — removes the legacy non-idempotent draw function overloads.
+- 20260925113022_draw_idempotency_actor_parameter_fix_v3 — resolves the actor-user parameter/column collision discovered during transactional runtime verification.
+- 20260925113105_financial_idempotency_result_invariant_v4 — extends the completion-result invariant to cover payout-payment and draw operations.
+
+The live rollback-only verification passed draw-run replay, same-key/different-payload rejection, draw-finalization replay, and same-key/different-winner rejection. The test transaction was rolled back and left no draw-idempotency residue.
