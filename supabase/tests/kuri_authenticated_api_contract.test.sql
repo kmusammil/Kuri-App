@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(56);
+select plan(61);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -625,6 +625,79 @@ select ok(
      and p.proname in ('allocate_payment_for_admin','allocate_payment_to_oldest_installments_for_admin')
      and (p.proconfig is null or not exists(select 1 from unnest(p.proconfig) cfg where cfg='search_path=public'))) = 0,
   'payment allocation APIs retain fixed search_path'
+);
+
+-- 57-61: draw API authority and invariant contract
+select ok(
+  has_function_privilege('authenticated','public.prepare_draw_for_admin(uuid)'::regprocedure,'EXECUTE')
+  and has_function_privilege('authenticated','public.set_draw_pool_entry_for_admin(uuid,boolean,text)'::regprocedure,'EXECUTE')
+  and has_function_privilege('authenticated','public.run_random_draw_for_admin(uuid,integer)'::regprocedure,'EXECUTE')
+  and has_function_privilege('authenticated','public.finalize_draw_for_admin(uuid,uuid[])'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.prepare_draw_for_admin(uuid)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.finalize_draw_for_admin(uuid,uuid[])'::regprocedure,'EXECUTE'),
+  'draw APIs are Kuri-scoped and authenticated-only'
+);
+
+select is(
+  (select count(*)
+   from pg_proc p
+   join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'transition_draw_status_for_admin',
+       'prepare_draw_for_admin',
+       'set_draw_pool_entry_for_admin',
+       'run_random_draw_for_admin',
+       'finalize_draw_for_admin',
+       'get_draw_session_for_admin',
+       'get_draw_selections_for_admin',
+       'list_draw_pool_for_admin',
+       'get_monthly_winners_for_admin'
+     )
+     and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'),
+  9::bigint,
+  'all draw and winner APIs authorize through Kuri authority'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='prepare_draw_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%draw_status_value=''POOL_READY''%'
+  )
+  and exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='run_random_draw_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%not e.system_eligible%'
+  ),
+  'draw eligibility remains frozen after POOL_READY'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='finalize_draw_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%A person who has already won in this Kuri cannot win again%'
+      and pg_get_functiondef(p.oid) ilike '%max_winners%'
+  ),
+  'winner finalization enforces no-repeat and maximum-feasible winner rules'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='finalize_draw_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%FOR UPDATE%'
+  ),
+  'winner finalization retains row-level concurrency locking'
 );
 
 select * from finish();
