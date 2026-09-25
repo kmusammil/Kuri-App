@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(59);
+select plan(65);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -679,6 +679,80 @@ select is(
   ),
   0::bigint,
   'every existing Kuri has a recovered Main Admin authority row'
+);
+
+
+-- 60-65: payment operation idempotency invariants
+select ok(
+  exists (
+    select 1 from pg_class
+    where oid='public.financial_idempotency_keys'::regclass
+      and relrowsecurity
+  ),
+  'financial idempotency key ledger has RLS'
+);
+
+select ok(
+  exists (
+    select 1 from pg_constraint
+    where conrelid='public.financial_idempotency_keys'::regclass
+      and conname='financial_idempotency_keys_actor_user_id_operation_type_idempotency_key_key'
+  ),
+  'payment operation idempotency key is unique per actor and operation'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.create_payment_for_admin(uuid,uuid,bigint,timestamptz,public.payment_method,text,text,text)'::regprocedure,
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.allocate_payment_for_admin(uuid,uuid,bigint,text)'::regprocedure,
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.create_payment_for_admin(uuid,uuid,bigint,timestamptz,public.payment_method,text,text,text)'::regprocedure,
+    'EXECUTE'
+  ),
+  'idempotent payment mutation APIs are authenticated-only'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='create_payment_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%financial_idempotency_keys%'
+      and pg_get_functiondef(p.oid) ilike '%request_hash%'
+  )
+  and exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='allocate_payment_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%financial_idempotency_keys%'
+      and pg_get_functiondef(p.oid) ilike '%request_hash%'
+  ),
+  'payment create and allocation functions bind retries to request hashes'
+);
+
+select is(
+  (
+    select count(*)
+    from public.financial_idempotency_keys f
+  ),
+  0::bigint,
+  'no idempotency keys persisted by rollback-only verification'
+);
+
+select ok(
+  not has_table_privilege('anon','public.financial_idempotency_keys','SELECT')
+  and not has_table_privilege('authenticated','public.financial_idempotency_keys','SELECT'),
+  'clients cannot directly read financial idempotency keys'
 );
 
 select * from finish();
