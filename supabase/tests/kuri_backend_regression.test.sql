@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(96);
+select plan(101);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -922,6 +922,69 @@ select ok(
       and pg_get_functiondef(p.oid) ilike '%coalesce(exit_refund_rule,%'
   ),
   'legacy Kuri creation organization lookup does not aggregate UUIDs with min(uuid) and uses the correct refund parameter'
+);
+
+-- 97-101: payout authority, idempotency, and net-amount regression
+select is(
+  (select count(*)
+   from pg_proc p
+   join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'transition_payout_status_for_admin',
+       'prepare_payout_for_admin',
+       'get_payout_for_admin',
+       'list_payouts_for_admin',
+       'mark_payout_paid_for_admin'
+     )
+     and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'),
+  5::bigint,
+  'all payout APIs use Kuri-scoped authority'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.mark_payout_paid_for_admin(uuid,timestamptz,public.payment_method,text,text,text,bigint)'::regprocedure,
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.mark_payout_paid_for_admin(uuid,timestamptz,public.payment_method,text,text,text,bigint)'::regprocedure,
+    'EXECUTE'
+  ),
+  'payout payment API is authenticated-only with the idempotent signature'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='mark_payout_paid_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%financial_idempotency_keys%'
+      and pg_get_functiondef(p.oid) ilike '%PAYOUT_PAYMENT%'
+  ),
+  'payout payment idempotency API uses the required operation type'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_constraint
+    where conrelid='public.financial_idempotency_keys'::regclass
+      and pg_get_constraintdef(oid) ilike '%PAYOUT_PAYMENT%'
+  ),
+  'financial idempotency ledger allows payout payment operations'
+);
+
+select is(
+  (select count(*)
+   from public.payouts po
+   where po.net_amount <> greatest(po.gross_amount-po.muppu_amount-po.other_deductions,0)),
+  0::bigint,
+  'existing payouts satisfy gross minus deductions net-amount invariant'
 );
 
 select * from finish();
