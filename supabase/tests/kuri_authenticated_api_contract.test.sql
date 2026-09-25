@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(71);
+select plan(76);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -828,6 +828,53 @@ select ok(
       and pg_get_functiondef(p.oid) ilike '%monthly_winners%'
   ),
   'cycle completion contract still requires finalized draw and winner'
+);
+
+-- 72-76: membership authority and late-join contract
+select ok(
+  has_function_privilege('authenticated','public.create_membership_for_admin(uuid,uuid,text)'::regprocedure,'EXECUTE')
+  and has_function_privilege('authenticated','public.list_memberships_for_admin(uuid)'::regprocedure,'EXECUTE')
+  and has_function_privilege('authenticated','public.transition_membership_status_for_admin(uuid,public.membership_status)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.create_membership_for_admin(uuid,uuid,text)'::regprocedure,'EXECUTE'),
+  'membership APIs are authenticated-only and Kuri-scoped'
+);
+
+select is(
+  (select count(*)
+   from pg_proc p
+   join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_membership_for_admin',
+       'list_memberships_for_admin',
+       'transition_membership_status_for_admin',
+       'list_people_available_for_membership'
+     )
+     and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'),
+  4::bigint,
+  'membership picker and mutation APIs authorize through Kuri authority'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='create_membership_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%status NOT IN (''COMPLETED'',''CANCELLED'')%'
+  ),
+  'new memberships do not receive retroactive terminal-cycle installments'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='create_membership_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%FOR UPDATE%'
+  ),
+  'membership creation retains Kuri row locking for capacity protection'
 );
 
 select * from finish();
