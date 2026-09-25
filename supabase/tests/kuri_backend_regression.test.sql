@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(138);
+select plan(146);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -1514,6 +1514,53 @@ select ok(
          where n.nspname='public' and p.proname='generate_kuri_schedule_for_admin'
            and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_kuri%'),
   'Expense obligations synchronize with activation, enrollment and schedule generation'
+);
+
+
+-- Membership exit / death / succession authority contract
+select ok(
+  exists(select 1 from information_schema.columns where table_schema='public' and table_name='membership_exits' and column_name='requested_at'),
+  'membership exit records capture requested_at'
+);
+select ok(
+  exists(select 1 from information_schema.columns where table_schema='public' and table_name='membership_exits' and column_name='death_date_verified_at'),
+  'membership exit records capture death-date verification'
+);
+select ok(
+  exists(select 1 from information_schema.columns where table_schema='public' and table_name='memberships' and column_name='current_holder_person_id'),
+  'memberships preserve a separate current holder'
+);
+select ok(
+  exists(select 1 from pg_class where oid='public.membership_successions'::regclass and relrowsecurity),
+  'membership_successions has RLS enabled'
+);
+select ok(
+  exists(select 1 from pg_trigger where tgname='membership_successions_append_only'),
+  'succession records are append-only'
+);
+select is(
+  (select count(*) from pg_proc where oid='public.create_membership_exit_for_admin(uuid,public.settlement_reason,date,public.refund_policy,bigint,text,text)'::regprocedure),
+  1,
+  'canonical exit-create signature exists'
+);
+select is(
+  (select count(*) from pg_proc where oid='public.create_membership_exit_for_admin(uuid,public.settlement_reason,date,public.refund_policy,bigint,text)'::regprocedure),
+  0,
+  'legacy short exit-create overload is absent'
+);
+select ok(
+  not exists(
+    select 1
+    from pg_proc
+    where proname in (
+      'create_membership_exit_for_admin','approve_membership_exit_for_admin',
+      'verify_death_date_for_admin','cancel_membership_exit_for_admin',
+      'settle_membership_exit_for_admin','record_membership_exit_refund_for_admin',
+      'record_death_settlement_for_admin','create_membership_succession_for_admin'
+    )
+    and position('organization_users' in pg_get_functiondef(oid))>0
+  ),
+  'exit/death/succession APIs use Kuri-scoped authority'
 );
 
 select * from finish();
