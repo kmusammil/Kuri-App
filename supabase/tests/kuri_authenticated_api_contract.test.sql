@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(90);
+select plan(99);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -1023,6 +1023,65 @@ select ok(
             and pg_get_functiondef(p.oid) ilike '%IF idem_row.status=''COMPLETED''%'
             and pg_get_functiondef(p.oid) ilike '%FROM public.monthly_winners%'),
   'draw finalization completed retries return the existing winner count'
+);
+
+-- 93-101: generalized Expense authenticated API contract
+select ok(
+  to_regclass('public.expense_rules') is not null
+  and to_regclass('public.expense_obligations') is not null
+  and (select relrowsecurity from pg_class where oid='public.expense_rules'::regclass)
+  and (select relrowsecurity from pg_class where oid='public.expense_obligations'::regclass),
+  'Expense tables exist with RLS enabled'
+);
+
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname in ('create_expense_rule_for_admin','set_expense_rule_active_for_admin','list_expense_rules_for_admin','list_expense_obligations_for_admin','mark_expense_obligation_paid_for_admin','waive_expense_obligation_for_admin','deduct_expense_from_prize_for_admin')
+     and has_function_privilege('authenticated',p.oid,'EXECUTE')
+     and not has_function_privilege('anon',p.oid,'EXECUTE')
+     and p.proconfig @> ARRAY['search_path=public'])=7,
+  'Expense APIs are authenticated-only with a fixed search_path'
+);
+
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname in ('sync_expense_obligations_for_rule','sync_expense_obligations_for_membership','sync_expense_obligations_for_kuri')
+     and not has_function_privilege('authenticated',p.oid,'EXECUTE')
+     and not has_function_privilege('anon',p.oid,'EXECUTE'))=3,
+  'Expense synchronization helpers are not client-callable'
+);
+
+select ok(
+  exists(select 1 from pg_type t join pg_enum e on e.enumtypid=t.oid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='expense_frequency' and e.enumlabel='ONE_TIME')
+  and exists(select 1 from pg_type t join pg_enum e on e.enumtypid=t.oid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='expense_frequency' and e.enumlabel='PER_CYCLE')
+  and exists(select 1 from pg_type t join pg_enum e on e.enumtypid=t.oid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='expense_obligation_status' and e.enumlabel='DEDUCTED_FROM_PRIZE'),
+  'Expense frequency and prize-deduction status are part of the API contract'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='create_expense_rule_for_admin' and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%' and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_rule%'),
+  'Expense rule creation is Kuri-scoped and synchronized'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='sync_expense_obligations_for_rule' and pg_get_functiondef(p.oid) ilike '%COMPLETED%' and pg_get_functiondef(p.oid) ilike '%CANCELLED%'),
+  'Expense synchronization excludes terminal cycles'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='deduct_expense_from_prize_for_admin' and pg_get_functiondef(p.oid) ilike '%payout_status<>''PENDING''%'),
+  'Expense prize deduction is restricted to pending payouts'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='audit_financial_change' and pg_get_functiondef(p.oid) ilike '%expense_rules%' and pg_get_functiondef(p.oid) ilike '%expense_obligations%'),
+  'Expense financial mutations are covered by the audit function'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='create_membership_for_admin' and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_membership%')
+  and exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='generate_cycles_for_admin' and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_kuri%'),
+  'Enrollment and cycle generation synchronize Expense obligations'
 );
 
 select * from finish();
