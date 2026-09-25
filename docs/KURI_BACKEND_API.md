@@ -24,6 +24,10 @@ The RLS/security helpers has_org_role(uuid, app_role[]) and is_org_member(uuid) 
 - get_organization_role(uuid) -> app_role — resolves the caller's role in an explicit organization context.
 - create_organization_for_user(text, organization_type, text, text, text, text) -> uuid — creates a PERSONAL or ORGANIZATION context and makes the creator its initial MAIN_ADMIN.
 
+### Kuri lifecycle
+- close_kuri_enrollment_for_admin(uuid) -> timestamptz — explicitly closes initial enrollment while the Kuri remains `OPEN`.
+- transition_kuri_status_for_admin(uuid,kuri_status) -> kuri_status — explicit lifecycle transition; `ACTIVE` records `actual_started_at`, `COMPLETED` records `completed_at`, and `ARCHIVED` records `archived_at`. Activation requires prior enrollment closure.
+
 ### Bootstrap and session
 - bootstrap_kuri_admin(text) -> uuid — one-time workspace bootstrap / existing MAIN_ADMIN workspace lookup.
 - get_my_workspace_id() -> uuid — current user's primary workspace.
