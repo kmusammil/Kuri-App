@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(87);
+select plan(90);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -942,24 +942,16 @@ select ok(
   'Kuri enrollment closure does not remove the controlled late-joining path'
 );
 
--- 82-87: draw operation idempotency contract
+-- 82-91: draw operation idempotency contract
 select ok(
-  has_function_privilege(
-    'authenticated',
-    'public.run_random_draw_for_admin(uuid,integer,text)'::regprocedure,
-    'EXECUTE'
-  )
-  and has_function_privilege(
-    'authenticated',
-    'public.finalize_draw_for_admin(uuid,uuid[],text)'::regprocedure,
-    'EXECUTE'
-  )
-  and not has_function_privilege(
-    'anon',
-    'public.finalize_draw_for_admin(uuid,uuid[],text)'::regprocedure,
-    'EXECUTE'
-  ),
-  'draw operation APIs use required idempotency keys and are authenticated-only'
+  has_function_privilege('authenticated','public.run_random_draw_for_admin(uuid,integer,text)'::regprocedure,'EXECUTE')
+  and has_function_privilege('authenticated','public.finalize_draw_for_admin(uuid,uuid[],text)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.run_random_draw_for_admin(uuid,integer,text)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.finalize_draw_for_admin(uuid,uuid[],text)'::regprocedure,'EXECUTE')
+  and (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+       where n.nspname='public' and p.proname in ('run_random_draw_for_admin','finalize_draw_for_admin')
+         and p.proconfig @> ARRAY['search_path=public'])=2,
+  'draw operation APIs are authenticated-only and fixed-search_path'
 );
 
 select ok(
@@ -969,44 +961,68 @@ select ok(
 );
 
 select ok(
-  exists (
-    select 1 from pg_constraint
-    where conrelid='public.financial_idempotency_keys'::regclass
-      and pg_get_constraintdef(oid) ilike '%DRAW_RUN%'
-      and pg_get_constraintdef(oid) ilike '%DRAW_FINALIZE%'
-  ),
-  'draw idempotency operation types are allowed'
+  exists (select 1 from pg_constraint where conrelid='public.financial_idempotency_keys'::regclass
+          and pg_get_constraintdef(oid) ilike '%DRAW_RUN%'
+          and pg_get_constraintdef(oid) ilike '%DRAW_FINALIZE%'
+          and pg_get_constraintdef(oid) ilike '%PAYOUT_PAYMENT%'),
+  'draw and payout idempotency operation types are allowed'
 );
 
 select ok(
-  exists (
-    select 1 from pg_proc p
-    join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname='public'
-      and p.proname='run_random_draw_for_admin'
-      and pg_get_functiondef(p.oid) ilike '%DRAW_RUN%'
-      and pg_get_functiondef(p.oid) ilike '%request_hash%'
-  )
-  and exists (
-    select 1 from pg_proc p
-    join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname='public'
-      and p.proname='finalize_draw_for_admin'
-      and pg_get_functiondef(p.oid) ilike '%DRAW_FINALIZE%'
-      and pg_get_functiondef(p.oid) ilike '%request_hash%'
-  ),
-  'draw operation APIs bind idempotency keys to request hashes'
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='run_random_draw_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%v_actor_user_id%'
+            and pg_get_functiondef(p.oid) ilike '%f.actor_user_id=v_actor_user_id%'
+            and pg_get_functiondef(p.oid) ilike '%request_hash%'),
+  'random draw binds its idempotency key to the authenticated actor and request hash'
 );
 
 select ok(
-  exists (
-    select 1 from pg_proc p
-    join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname='public'
-      and p.proname='run_random_draw_for_admin'
-      and pg_get_functiondef(p.oid) ilike '%IF idem_row.status=''COMPLETED''%'
-  ),
-  'random draw completed retries return the existing selection set'
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='finalize_draw_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%v_actor_user_id%'
+            and pg_get_functiondef(p.oid) ilike '%f.actor_user_id=v_actor_user_id%'
+            and pg_get_functiondef(p.oid) ilike '%request_hash%'),
+  'draw finalization binds its idempotency key to the authenticated actor and request hash'
+);
+
+select ok(
+  exists (select 1 from pg_constraint where conrelid='public.financial_idempotency_keys'::regclass
+          and conname='financial_idempotency_keys_check'
+          and pg_get_constraintdef(oid) ilike '%DRAW_RUN%'
+          and pg_get_constraintdef(oid) ilike '%result_bigint IS NOT NULL%'),
+  'DRAW_RUN completion result satisfies the financial idempotency invariant'
+);
+
+select ok(
+  exists (select 1 from pg_constraint where conrelid='public.financial_idempotency_keys'::regclass
+          and conname='financial_idempotency_keys_check'
+          and pg_get_constraintdef(oid) ilike '%DRAW_FINALIZE%'
+          and pg_get_constraintdef(oid) ilike '%result_bigint IS NOT NULL%'),
+  'DRAW_FINALIZE completion result satisfies the financial idempotency invariant'
+);
+
+select ok(
+  exists (select 1 from pg_constraint where conrelid='public.financial_idempotency_keys'::regclass
+          and conname='financial_idempotency_keys_check'
+          and pg_get_constraintdef(oid) ilike '%PAYOUT_PAYMENT%'
+          and pg_get_constraintdef(oid) ilike '%result_payment_id IS NOT NULL%'),
+  'PAYOUT_PAYMENT completion result remains valid'
+);
+
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='run_random_draw_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%IF idem_row.status=''COMPLETED''%'),
+  'random draw completed retries return the stored selection set'
+);
+
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='finalize_draw_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%IF idem_row.status=''COMPLETED''%'
+            and pg_get_functiondef(p.oid) ilike '%FROM public.monthly_winners%'),
+  'draw finalization completed retries return the existing winner count'
 );
 
 select * from finish();
