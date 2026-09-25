@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(66);
+select plan(71);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -766,6 +766,68 @@ select ok(
       and exists(select 1 from unnest(p.proconfig) cfg where cfg='search_path=public')
   ),
   'payout payment API has fixed SECURITY DEFINER search_path'
+);
+
+-- 67-71: cycle authority and immutable schedule contract
+select ok(
+  has_function_privilege('authenticated','public.generate_cycles_for_admin(uuid)'::regprocedure,'EXECUTE')
+  and has_function_privilege('authenticated','public.generate_kuri_schedule_for_admin(uuid)'::regprocedure,'EXECUTE')
+  and has_function_privilege('authenticated','public.get_cycle_for_admin(uuid)'::regprocedure,'EXECUTE')
+  and has_function_privilege('authenticated','public.list_cycles_for_admin(uuid)'::regprocedure,'EXECUTE')
+  and has_function_privilege('authenticated','public.transition_cycle_status_for_admin(uuid,public.cycle_status)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.transition_cycle_status_for_admin(uuid,public.cycle_status)'::regprocedure,'EXECUTE'),
+  'cycle APIs are authenticated-only'
+);
+
+select is(
+  (select count(*)
+   from pg_proc p
+   join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'generate_cycles_for_admin',
+       'generate_kuri_schedule_for_admin',
+       'get_cycle_for_admin',
+       'list_cycles_for_admin',
+       'transition_cycle_status_for_admin'
+     )
+     and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'),
+  5::bigint,
+  'cycle APIs authorize through Kuri authority'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='generate_cycles_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%status NOT IN (''COMPLETED'',''CANCELLED'')%'
+  ),
+  'cycle schedule regeneration preserves terminal cycle history'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname in ('generate_cycles_for_admin','transition_cycle_status_for_admin')
+      and pg_get_functiondef(p.oid) ilike '%FOR UPDATE%'
+  ),
+  'cycle mutation APIs retain concurrency row locking'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='transition_cycle_status_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%draw_sessions%'
+      and pg_get_functiondef(p.oid) ilike '%monthly_winners%'
+  ),
+  'cycle completion contract still requires finalized draw and winner'
 );
 
 select * from finish();
