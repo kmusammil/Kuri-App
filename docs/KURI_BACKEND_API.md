@@ -159,3 +159,16 @@ At the current 2026-09-25 ledger-update checkpoint:
 - payment allocation invariant checks and a real parallel-session race test are maintained in the DB regression/integration suites
 
 Frontend clients should call this API through the Supabase client rather than writing directly to protected domain tables.
+
+## Generalized Expenses
+
+The Expense layer is now distinct from legacy Muppu history and follows the canonical rule → obligation → settlement model.
+
+- `create_expense_rule_for_admin(kuri_id,name,description,frequency,amount,active)` creates a Kuri-scoped rule. Frequencies are `ONE_TIME` and `PER_CYCLE`.
+- `set_expense_rule_active_for_admin(rule_id,active)` disables or re-enables future obligation generation without deleting historical obligations.
+- `list_expense_rules_for_admin(kuri_id)` and `list_expense_obligations_for_admin(kuri_id,cycle_id)` expose controlled admin reads.
+- `mark_expense_obligation_paid_for_admin(obligation_id,reference,paid_at)` moves an unpaid obligation to `PAID`.
+- `waive_expense_obligation_for_admin(obligation_id,reason)` moves an unpaid obligation to `WAIVED`; a reason is required.
+- `deduct_expense_from_prize_for_admin(obligation_id,payout_id,reference)` moves an unpaid obligation to `DEDUCTED_FROM_PRIZE` only when the referenced payout is `PENDING`, belongs to the same Kuri, and targets the same person.
+
+Existing completed/cancelled cycle history is not recreated for new per-cycle rules. New active memberships and schedule generation synchronize active Expense rules through internal, non-client-callable helpers. Expense tables use RLS with direct client table access revoked, and Expense mutations are included in the financial audit trail.
