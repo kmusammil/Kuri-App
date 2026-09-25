@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(94);
+select plan(96);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -892,6 +892,36 @@ select ok(
   has_function_privilege('authenticated','public.allocate_payment_for_admin(uuid,uuid,bigint,text)'::regprocedure,'EXECUTE')
   and not has_function_privilege('anon','public.allocate_payment_for_admin(uuid,uuid,bigint,text)'::regprocedure,'EXECUTE'),
   'targeted allocation API remains authenticated-only after policy hardening'
+);
+
+-- 95-96: remaining draw read authority and legacy Kuri creation regression
+select is(
+  (select count(*)
+   from pg_proc p
+   join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'get_draw_session_for_admin',
+       'get_draw_selections_for_admin',
+       'list_draw_pool_for_admin',
+       'get_monthly_winners_for_admin'
+     )
+     and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'),
+  4::bigint,
+  'draw read APIs use Kuri-scoped authority'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='create_kuri_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%count(DISTINCT ou.organization_id)%'
+      and pg_get_functiondef(p.oid) ilike '%coalesce(exit_refund_rule,%'
+  ),
+  'legacy Kuri creation organization lookup does not aggregate UUIDs with min(uuid) and uses the correct refund parameter'
 );
 
 select * from finish();
