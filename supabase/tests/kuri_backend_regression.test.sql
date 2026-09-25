@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(44);
+select plan(46);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -142,6 +142,49 @@ select ok(
 );
 
 -- 9-12: invitation/join-request structural invariants
+
+-- Kuri-level authority reconciliation
+select is(
+  (
+    select count(*)
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname in (
+        'list_kuris_for_admin',
+        'get_kuri_for_admin',
+        'list_memberships_for_admin',
+        'list_people_available_for_membership',
+        'create_membership_for_admin',
+        'list_cycles_for_admin',
+        'get_cycle_for_admin'
+      )
+      and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'
+  ),
+  7::bigint,
+  'core Kuri reads and membership creation use Kuri-scoped authority'
+);
+
+select is(
+  (
+    select count(*)
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname in (
+        'list_kuris_for_admin',
+        'get_kuri_for_admin',
+        'list_memberships_for_admin',
+        'list_people_available_for_membership',
+        'create_membership_for_admin',
+        'list_cycles_for_admin',
+        'get_cycle_for_admin'
+      )
+      and pg_get_functiondef(p.oid) ilike '%organization_users%'
+  ),
+  0::bigint,
+  'core Kuri RPCs do not authorize through organization_users directly'
+);
 select ok(
   exists (
     select 1 from pg_class c
