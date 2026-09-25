@@ -59,10 +59,10 @@ Lifecycle state changes are exposed through the authenticated transition RPCs ab
 - list_memberships_for_admin(uuid) -> setof record
 
 ### Payments and installments
-- create_payment_for_admin(uuid,uuid,bigint,timestamptz,payment_method,text,text) -> uuid — explicit Kuri scope + person membership check.
+- create_payment_for_admin(uuid,uuid,bigint,timestamptz,payment_method,text,text,text) -> uuid — explicit Kuri scope + person membership check + required idempotency key.
 - get_payment_for_admin(uuid) -> record — authorizes through the payment's Kuri.
 - list_payments_for_admin(uuid) -> setof record — explicit Kuri scope.
-- allocate_payment_for_admin(uuid,uuid,bigint) -> bigint — payment and installment must belong to the same Kuri.
+- allocate_payment_for_admin(uuid,uuid,bigint,text) -> bigint — payment and installment must belong to the same Kuri + required idempotency key.
 - list_payment_allocations_for_admin(uuid) -> setof record — scoped to the payment's Kuri.
 - list_installments_for_cycle_admin(uuid) -> setof record — cycle resolves to its Kuri authority.
 - list_installments_for_payment_admin(uuid) -> setof record — explicit Kuri scope.
@@ -124,6 +124,7 @@ Administrative RPCs must enforce:
 ## Non-API functions
 
 The following classes are internal database implementation and must not be exposed through the authenticated Data API:
+- financial idempotency keys;
 - trigger functions;
 - migration/test helpers;
 - audit trigger functions;
@@ -137,5 +138,6 @@ At the current 2026-09-25 ledger-update checkpoint:
 - authenticated-callable lifecycle transition RPCs: 3
 - existing Kuri records have Kuri-level MAIN_ADMIN recovery rows
 - payment admin APIs are now Kuri-scoped in migration `20260925080606_payment_kuri_authority_v1`
+- payment create/allocation retries are idempotent through `financial_idempotency_keys`
 
 Frontend clients should call this API through the Supabase client rather than writing directly to protected domain tables.
