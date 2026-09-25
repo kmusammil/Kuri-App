@@ -156,13 +156,15 @@ describe('Kuri-App positive end-to-end workflow', () => {
 
     const drawAttempts = await Promise.all([
       adminA.rpc('run_random_draw_for_admin', {
-        target_cycle_id: cycleId,
-        selection_count: 1,
-      }),
+      target_cycle_id: cycleId,
+      selection_count: 1,
+      p_idempotency_key: `DRAW-RUN-${suffix}-${1}`,
+    }),
       adminA.rpc('run_random_draw_for_admin', {
-        target_cycle_id: cycleId,
-        selection_count: 1,
-      }),
+      target_cycle_id: cycleId,
+      selection_count: 1,
+      p_idempotency_key: `DRAW-RUN-${suffix}-${1}`,
+    }),
     ])
     const successfulDraws = drawAttempts.filter((attempt) => !attempt.error)
     const failedDraws = drawAttempts.filter((attempt) => !!attempt.error)
@@ -174,9 +176,10 @@ describe('Kuri-App positive end-to-end workflow', () => {
     expect(selections[0].membership_id).toBe(membershipId)
 
     const { data: winnerCount, error: finalizeError } = await adminA.rpc('finalize_draw_for_admin', {
-      target_cycle_id: cycleId,
-      final_membership_ids: [membershipId],
-    })
+        target_cycle_id: cycleId,
+        final_membership_ids: [membershipId],,
+        p_idempotency_key: `DRAW-FINALIZE-${suffix}`,
+      })
     expect(finalizeError).toBeNull()
     expect(winnerCount).toBe(1)
 
