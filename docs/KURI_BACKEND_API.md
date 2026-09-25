@@ -1,12 +1,12 @@
 # Kuri-App Backend API Surface
 
-Status: canonical API inventory for the current Supabase production database.
+Status: canonical API inventory for the current Supabase production database; updated during the 2026-09-25 ledger-driven backend update.
 
 ## Exposure model
 
 Client calls use Supabase Auth + PostgREST RPCs. Every client-facing mutation below is an authenticated application API operation. Authorization is enforced inside the function and is tenant-scoped to the caller's organization.
 
-Security-definer is intentional for the client-facing admin RPCs because these functions centralize privileged mutations and reads behind explicit authorization and validation. Supabase's advisor flags them because they are reachable by the authenticated role; that warning is treated as a reviewed, intentional API exposure.
+Security-definer is intentional for the client-facing admin RPCs because these functions centralize privileged mutations and reads behind explicit authorization and validation. Supabase's advisor flags them because they are reachable by the authenticated role; that warning is treated as a reviewed, intentional API exposure. The live reviewed authenticated SECURITY DEFINER surface is now 70 functions.
 
 Anonymous execution is disabled for all exposed security-definer RPCs.
 
@@ -18,6 +18,11 @@ The three lifecycle transition RPCs are authenticated application APIs for ADMIN
 The RLS/security helpers has_org_role(uuid, app_role[]) and is_org_member(uuid) remain authenticated-callable because they are used by RLS policies.
 
 ## Canonical RPC groups
+
+### Organization context
+- list_my_organizations() -> setof record — returns organizations the signed-in user belongs to, including explicit organization type and organization-level role.
+- get_organization_role(uuid) -> app_role — resolves the caller's role in an explicit organization context.
+- create_organization_for_user(text, organization_type, text, text, text, text) -> uuid — creates a PERSONAL or ORGANIZATION context and makes the creator its initial MAIN_ADMIN.
 
 ### Bootstrap and session
 - bootstrap_kuri_admin(text) -> uuid — one-time workspace bootstrap / existing MAIN_ADMIN workspace lookup.
@@ -31,7 +36,8 @@ The RLS/security helpers has_org_role(uuid, app_role[]) and is_org_member(uuid) 
 - is_org_member(uuid) -> boolean — RLS/security helper.
 
 ### Kuri and cycle management
-- create_kuri_for_admin(text,text,date,integer,integer,bigint,integer,integer,bigint,bigint,text,refund_policy) -> uuid
+- create_kuri_for_admin(text,text,date,integer,integer,bigint,integer,integer,bigint,bigint,text,refund_policy) -> uuid — backward-compatible single-organization creator; fails when the caller has multiple admin organizations and no explicit context is supplied.
+- create_kuri_for_organization_admin(uuid,text,text,date,integer,integer,bigint,integer,integer,bigint,bigint,text,refund_policy) -> uuid — explicit organization-scoped Kuri creation.
 - get_kuri_for_admin(uuid) -> record
 - list_kuris_for_admin() -> setof record
 - generate_cycles_for_admin(uuid) -> integer
@@ -125,9 +131,9 @@ The following classes are internal database implementation and must not be expos
 
 ## Verification snapshot
 
-At audit time:
-- authenticated-callable security-definer functions before lifecycle API correction: 62
-- authenticated-callable security-definer functions after lifecycle API correction: 65
+At the current 2026-09-25 ledger-update checkpoint:
+- authenticated-callable security-definer functions: 70
+- the additional five functions are the explicit organization/Kuri context APIs introduced by migration `20260925072540_identity_organization_authority_v1`
 - anonymous-callable security-definer functions: 0
 - authenticated-callable lifecycle transition RPCs: 3
 
