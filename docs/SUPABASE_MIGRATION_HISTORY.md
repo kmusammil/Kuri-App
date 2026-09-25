@@ -89,3 +89,8 @@ Three production migrations were applied and retained as exact historical entrie
 - `20260925090311_payout_idempotency_operation_type_v1` — extends the controlled financial idempotency operation-type constraint to permit `PAYOUT_PAYMENT`.
 
 The first migration and the two follow-up repairs remain in production history; no migration-history rows were rewritten.
+
+
+## 2026-09-25 cycle authority and immutability
+
+Migration `20260925090700_cycle_kuri_authority_and_immutability_v1` was applied to production. It moves cycle generation, schedule generation, cycle reads, and cycle status transitions to Kuri-scoped authority with row locking, and prevents regeneration from rewriting `COMPLETED` or `CANCELLED` cycle dates. No remote migration-history rows were rewritten.
