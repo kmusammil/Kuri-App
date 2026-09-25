@@ -64,6 +64,13 @@ Lifecycle state changes are exposed through the authenticated transition RPCs ab
 - list_payments_for_admin(uuid) -> setof record — explicit Kuri scope.
 - allocate_payment_for_admin(uuid,uuid,bigint,text) -> bigint — payment and installment must belong to the same Kuri + required idempotency key.
 - list_payment_allocations_for_admin(uuid) -> setof record — scoped to the payment's Kuri.
+- create_payment_correction_request_for_admin(uuid,bigint,timestamptz,payment_method,text,uuid,text,text) -> uuid — records a correction request without mutating the original payment.
+- create_payment_reversal_request_for_admin(uuid,bigint,uuid,text) -> uuid — records a full or partial reversal request; partial reversal of an allocated payment targets a specific allocation.
+- approve_payment_adjustment_request_for_admin(uuid) -> void — REQUESTED -> APPROVED.
+- reject_payment_adjustment_request_for_admin(uuid,text) -> void — REQUESTED -> REJECTED with a required rejection reason.
+- execute_payment_adjustment_request_for_admin(uuid) -> void — APPROVED -> EXECUTED; pending/rejected requests have no financial effect.
+- list_payment_adjustment_requests_for_admin(uuid) -> setof record — Kuri-scoped adjustment request history.
+- get_payment_adjustment_request_for_admin(uuid) -> setof record — Kuri-scoped adjustment request detail.
 - list_installments_for_cycle_admin(uuid) -> setof record — cycle resolves to its Kuri authority.
 - list_installments_for_payment_admin(uuid) -> setof record — explicit Kuri scope.
 - list_installments_for_person_payment_admin(uuid,uuid) -> setof record — explicit Kuri + person scope.
@@ -133,7 +140,7 @@ The following classes are internal database implementation and must not be expos
 ## Verification snapshot
 
 At the current 2026-09-25 ledger-update checkpoint:
-- authenticated-callable security-definer functions: 77
+- authenticated-callable security-definer functions: 84
 - anonymous-callable security-definer functions: 0
 - authenticated-callable lifecycle transition RPCs: 3
 - existing Kuri records have Kuri-level MAIN_ADMIN recovery rows
