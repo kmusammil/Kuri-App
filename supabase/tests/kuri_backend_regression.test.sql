@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(48);
+select plan(59);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -577,6 +577,108 @@ select is(
      and po.created_at >= timestamp '2026-09-20 00:00:00+00'),
   0::bigint,
   'new payouts are linked only to completed cycles'
+);
+
+
+-- 49-54: payment Kuri scoping and legacy authority invariants
+select ok(
+  exists (
+    select 1
+    from information_schema.columns
+    where table_schema='public'
+      and table_name='payments'
+      and column_name='kuri_id'
+      and is_nullable='NO'
+  ),
+  'payments have a required Kuri tenant key'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_constraint
+    where conrelid='public.payments'::regclass
+      and conname='payments_kuri_organization_fkey'
+  ),
+  'payments enforce Kuri and organization consistency'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.create_payment_for_admin(uuid,uuid,bigint,timestamptz,public.payment_method,text,text)'::regprocedure,
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.create_payment_for_admin(uuid,uuid,bigint,timestamptz,public.payment_method,text,text)'::regprocedure,
+    'EXECUTE'
+  )
+  and to_regprocedure('public.create_payment_for_admin(uuid,bigint,timestamptz,public.payment_method,text,text)') is null,
+  'payment creation API uses the new Kuri-scoped signature only'
+);
+
+select is(
+  (
+    select count(*)
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname in (
+        'create_payment_for_admin',
+        'list_payments_for_admin',
+        'get_payment_for_admin',
+        'list_installments_for_person_payment_admin',
+        'list_installments_for_payment_admin',
+        'list_installments_for_cycle_admin',
+        'list_payment_allocations_for_admin',
+        'allocate_payment_for_admin',
+        'audit_financial_ledger_for_admin',
+        'refresh_membership_exit_financials_for_admin'
+      )
+      and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'
+  ),
+  10::bigint,
+  'all payment/installation admin APIs use Kuri-scoped authority'
+);
+
+select is(
+  (
+    select count(*)
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname in (
+        'create_payment_for_admin',
+        'list_payments_for_admin',
+        'get_payment_for_admin',
+        'list_installments_for_person_payment_admin',
+        'list_installments_for_payment_admin',
+        'list_installments_for_cycle_admin',
+        'list_payment_allocations_for_admin',
+        'allocate_payment_for_admin',
+        'audit_financial_ledger_for_admin',
+        'refresh_membership_exit_financials_for_admin'
+      )
+      and pg_get_functiondef(p.oid) ilike '%organization_users%'
+  ),
+  0::bigint,
+  'payment/installation admin APIs do not authorize through organization_users directly'
+);
+
+select is(
+  (
+    select count(*)
+    from public.kuris k
+    where not exists (
+      select 1
+      from public.kuri_admins ka
+      where ka.kuri_id=k.id
+        and ka.role='MAIN_ADMIN'
+    )
+  ),
+  0::bigint,
+  'every existing Kuri has a recovered Main Admin authority row'
 );
 
 select * from finish();
