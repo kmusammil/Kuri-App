@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(38);
+select plan(48);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -517,6 +517,66 @@ select ok(
       and p.proconfig is not null
   ),
   'idempotent payment functions retain SECURITY DEFINER with fixed configuration'
+);
+
+
+
+-- 39-48: payment correction/reversal API boundary
+select is(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.prosecdef and has_function_privilege('authenticated',p.oid,'EXECUTE')
+     and p.proname in ('create_payment_correction_request_for_admin','create_payment_reversal_request_for_admin','approve_payment_adjustment_request_for_admin','reject_payment_adjustment_request_for_admin','execute_payment_adjustment_request_for_admin','list_payment_adjustment_requests_for_admin','get_payment_adjustment_request_for_admin')),7::bigint,
+  'seven payment adjustment APIs are authenticated-callable'
+);
+select is(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.prosecdef and has_function_privilege('anon',p.oid,'EXECUTE')
+     and p.proname in ('create_payment_correction_request_for_admin','create_payment_reversal_request_for_admin','approve_payment_adjustment_request_for_admin','reject_payment_adjustment_request_for_admin','execute_payment_adjustment_request_for_admin','list_payment_adjustment_requests_for_admin','get_payment_adjustment_request_for_admin')),0::bigint,
+  'anonymous clients cannot execute payment adjustment APIs'
+);
+select ok(
+  (select count(*) from pg_class where oid in ('public.payment_adjustment_requests'::regclass,'public.payment_corrections'::regclass,'public.payment_reversal_entries'::regclass) and relrowsecurity)=3
+  and not has_table_privilege('authenticated','public.payment_adjustment_requests','SELECT')
+  and not has_table_privilege('authenticated','public.payment_corrections','SELECT')
+  and not has_table_privilege('authenticated','public.payment_reversal_entries','SELECT'),
+  'payment adjustment ledgers are RLS protected and not directly readable'
+);
+select ok(
+  not has_table_privilege('authenticated','public.payment_adjustment_requests','INSERT')
+  and not has_table_privilege('authenticated','public.payment_adjustment_requests','UPDATE')
+  and not has_table_privilege('authenticated','public.payment_adjustment_requests','DELETE'),
+  'clients cannot directly mutate adjustment requests'
+);
+select ok(
+  not has_function_privilege('authenticated','public.get_effective_payment_amount(uuid)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('authenticated','public.get_effective_payment_allocation_amount(uuid)'::regprocedure,'EXECUTE'),
+  'effective payment helpers are internal'
+);
+select ok(
+  exists (select 1 from pg_type t join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='payment_adjustment_status'),
+  'payment adjustment lifecycle type exists'
+);
+select ok(
+  exists (select 1 from pg_constraint where conrelid='public.payment_adjustment_requests'::regclass and conname='payment_adjustment_requests_kuri_org_fkey')
+  and exists (select 1 from pg_constraint where conrelid='public.payment_corrections'::regclass and conname='payment_corrections_kuri_org_fkey')
+  and exists (select 1 from pg_constraint where conrelid='public.payment_reversal_entries'::regclass and conname='payment_reversal_entries_kuri_org_fkey'),
+  'payment adjustment ledgers preserve Kuri/organization tenancy'
+);
+select ok(
+  exists (select 1 from pg_constraint where conrelid='public.payment_adjustment_requests'::regclass and pg_get_constraintdef(oid) ilike '%reason%')
+  and exists (select 1 from pg_constraint where conrelid='public.payment_adjustment_requests'::regclass and pg_get_constraintdef(oid) ilike '%REJECTED%'),
+  'adjustment requests require reasons and rejection reasons'
+);
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='reject_payment_adjustment_request_for_admin' and pg_get_functiondef(p.oid) ilike '%p_rejection_reason%'),
+  'rejection API input parameter is unambiguous'
+);
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.prosecdef and has_function_privilege('authenticated',p.oid,'EXECUTE')
+     and p.proname in ('create_payment_correction_request_for_admin','create_payment_reversal_request_for_admin','approve_payment_adjustment_request_for_admin','reject_payment_adjustment_request_for_admin','execute_payment_adjustment_request_for_admin','list_payment_adjustment_requests_for_admin','get_payment_adjustment_request_for_admin')
+     and (p.proconfig is null or not exists(select 1 from unnest(p.proconfig) cfg where cfg='search_path=public'))) = 0,
+  'payment adjustment APIs retain fixed search_path'
 );
 
 select * from finish();
