@@ -17,7 +17,7 @@ The database/API layer is now considered the backend contract for the applicatio
 - Kuri, cycle, draw, membership, exit, payout, and settlement state machines.
 - Draw eligibility, winner, and membership invariants.
 - Draw and payout concurrency protection.
-- Payment and installment allocation integrity currently has clean live data; oldest-first/no-skipping, advance-payment automation, idempotency, and correction/reversal remain ledger work.
+- Payment and installment allocation integrity currently has clean live data; payment creation/allocation now have authenticated idempotency/replay protection. Oldest-first/no-skipping, advance-payment handling, and correction/reversal remain ledger work.
 - Payout and Muppu accounting invariants.
 - Membership exit/refund/death-settlement flows.
 - Nominee tenancy and access controls.
@@ -31,6 +31,7 @@ The database/API layer is now considered the backend contract for the applicatio
 - Canonical backend API documentation.
 - Explicit organization type/context foundation.
 - Kuri-scoped MAIN_ADMIN/ADMIN authority foundation.
+- Payment-operation idempotency for payment creation and allocation, with request-hash replay protection.
 - Invitation and join-request workflow with single-use codes, expiry/revocation, explicit approval/rejection, and audit events.
 
 ## Final live verification
