@@ -86,7 +86,7 @@ describe('Kuri-App payment allocation concurrency', () => {
       payment_method: 'CASH',
       payment_reference: `RACE-${suffix}`,
       payment_notes: 'Disposable authenticated allocation concurrency fixture',
-      idempotency_key: `RACE-PAYMENT-CREATE-${suffix}`,
+      p_idempotency_key: `RACE-PAYMENT-CREATE-${suffix}`,
     })
     expect(paymentError).toBeNull()
     expect(payment).toBeTruthy()
@@ -100,13 +100,13 @@ describe('Kuri-App payment allocation concurrency', () => {
         target_payment_id: paymentId,
         target_membership_id: membershipId,
         requested_allocation_amount: 150,
-        idempotency_key: keyA,
+        p_idempotency_key: keyA,
       }),
       adminB.rpc('allocate_payment_to_oldest_installments_for_admin', {
         target_payment_id: paymentId,
         target_membership_id: membershipId,
         requested_allocation_amount: 150,
-        idempotency_key: keyB,
+        p_idempotency_key: keyB,
       }),
     ])
 
@@ -127,7 +127,7 @@ describe('Kuri-App payment allocation concurrency', () => {
         target_payment_id: paymentId,
         target_membership_id: membershipId,
         requested_allocation_amount: 150,
-        idempotency_key: successfulKey,
+        p_idempotency_key: successfulKey,
       },
     )
     expect(replayError).toBeNull()
