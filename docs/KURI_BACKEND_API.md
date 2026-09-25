@@ -6,7 +6,7 @@ Status: canonical API inventory for the current Supabase production database; up
 
 Client calls use Supabase Auth + PostgREST RPCs. Every client-facing mutation below is an authenticated application API operation. Authorization is enforced inside the function and is tenant-scoped to the caller's organization.
 
-Security-definer is intentional for the client-facing admin RPCs because these functions centralize privileged mutations and reads behind explicit authorization and validation. Supabase's advisor flags them because they are reachable by the authenticated role; that warning is treated as a reviewed, intentional API exposure. The live reviewed authenticated SECURITY DEFINER surface is now 70 functions.
+Security-definer is intentional for the client-facing admin RPCs because these functions centralize privileged mutations and reads behind explicit authorization and validation. Supabase's advisor flags them because they are reachable by the authenticated role; that warning is treated as a reviewed, intentional API exposure. The live reviewed authenticated SECURITY DEFINER surface is now 77 functions.
 
 Anonymous execution is disabled for all exposed security-definer RPCs.
 
