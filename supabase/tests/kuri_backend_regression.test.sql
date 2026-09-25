@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(119);
+select plan(125);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -1201,6 +1201,65 @@ select ok(
       and tgname like '%status%'
   ),
   'Kuri lifecycle status guard remains trigger-protected'
+);
+
+-- 120-125: draw operation idempotency/replay protection
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.run_random_draw_for_admin(uuid,integer,text)'::regprocedure,
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.finalize_draw_for_admin(uuid,uuid[],text)'::regprocedure,
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.run_random_draw_for_admin(uuid,integer,text)'::regprocedure,
+    'EXECUTE'
+  ),
+  'draw operation idempotency is exposed only to authenticated callers'
+);
+
+select ok(
+  to_regprocedure('public.run_random_draw_for_admin(uuid,integer)') is null
+  and to_regprocedure('public.finalize_draw_for_admin(uuid,uuid[])') is null,
+  'legacy non-idempotent draw signatures are removed'
+);
+
+select ok(
+  exists (
+    select 1 from pg_constraint
+    where conrelid='public.financial_idempotency_keys'::regclass
+      and pg_get_constraintdef(oid) ilike '%DRAW_RUN%'
+      and pg_get_constraintdef(oid) ilike '%DRAW_FINALIZE%'
+  ),
+  'financial idempotency ledger allows draw run and draw finalization operations'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='run_random_draw_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%financial_idempotency_keys%'
+      and pg_get_functiondef(p.oid) ilike '%completed retry%'
+  ),
+  'random draw retries return the frozen selection set without rerunning randomness'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='finalize_draw_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%PAYOUT%'
+  ) = false,
+  'draw finalization idempotency remains isolated from payout operations'
 );
 
 select * from finish();
