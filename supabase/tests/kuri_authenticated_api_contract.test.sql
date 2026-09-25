@@ -15,7 +15,7 @@
 
 begin;
 
-select plan(99);
+select plan(103);
 
 -- 1. Every exposed public table remains protected by RLS.
 select is(
@@ -1082,6 +1082,51 @@ select ok(
   exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='create_membership_for_admin' and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_membership%')
   and exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='generate_cycles_for_admin' and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_kuri%'),
   'Enrollment and cycle generation synchronize Expense obligations'
+);
+
+-- 102-105: generalized Expense payout contract
+select ok(
+  exists (
+    select 1 from information_schema.columns
+    where table_schema='public'
+      and table_name='payouts'
+      and column_name='expense_deductions'
+      and data_type='bigint'
+      and is_nullable='NO'
+  ),
+  'payouts expose generalized Expense deductions'
+);
+
+select ok(
+  exists (
+    select 1 from pg_constraint
+    where conrelid='public.payouts'::regclass
+      and conname='payouts_net_amount_invariant'
+      and pg_get_constraintdef(oid) ilike '%expense_deductions%'
+  ),
+  'payout net amount invariant includes generalized Expense deductions'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='prepare_payout_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%expense_obligations%'
+      and pg_get_functiondef(p.oid) ilike '%DEDUCTED_FROM_PRIZE%'
+  ),
+  'payout preparation includes linked generalized Expense obligations'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='mark_payout_paid_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%expense_deduction_amount%'
+      and pg_get_functiondef(p.oid) ilike '%PAYOUT_PAYMENT%'
+  ),
+  'payout payment recomputes generalized Expense deductions under idempotency'
 );
 
 select * from finish();
