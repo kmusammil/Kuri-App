@@ -158,18 +158,18 @@ describe('Kuri-App positive end-to-end workflow', () => {
       adminA.rpc('run_random_draw_for_admin', {
       target_cycle_id: cycleId,
       selection_count: 1,
-      p_idempotency_key: `DRAW-RUN-${suffix}-${1}`,
+      p_idempotency_key: `DRAW-RUN-${suffix}`,
     }),
       adminA.rpc('run_random_draw_for_admin', {
       target_cycle_id: cycleId,
       selection_count: 1,
-      p_idempotency_key: `DRAW-RUN-${suffix}-${1}`,
+      p_idempotency_key: `DRAW-RUN-${suffix}`,
     }),
     ])
     const successfulDraws = drawAttempts.filter((attempt) => !attempt.error)
     const failedDraws = drawAttempts.filter((attempt) => !!attempt.error)
-    expect(successfulDraws).toHaveLength(1)
-    expect(failedDraws).toHaveLength(1)
+    expect(successfulDraws).toHaveLength(2)
+    expect(failedDraws).toHaveLength(0)
 
     const selections = successfulDraws[0].data
     expect(selections).toHaveLength(1)
@@ -177,7 +177,7 @@ describe('Kuri-App positive end-to-end workflow', () => {
 
     const { data: winnerCount, error: finalizeError } = await adminA.rpc('finalize_draw_for_admin', {
         target_cycle_id: cycleId,
-        final_membership_ids: [membershipId],,
+        final_membership_ids: [membershipId],
         p_idempotency_key: `DRAW-FINALIZE-${suffix}`,
       })
     expect(finalizeError).toBeNull()
@@ -209,23 +209,25 @@ describe('Kuri-App positive end-to-end workflow', () => {
     const payoutAttempts = await Promise.all([
       adminA.rpc('mark_payout_paid_for_admin', {
         target_winner_id: winnerId,
-        payout_payment_date: new Date().toISOString(),
+        payout_payment_date: '2026-09-25T12:00:00.000Z',
         payout_method: 'CASH',
-        payout_reference: `E2E-PAYOUT-A-${suffix}`,
+        p_idempotency_key: `E2E-PAYOUT-${suffix}`,
+        payout_reference: `E2E-PAYOUT-${suffix}`,
         payout_notes: 'Disposable authenticated integration fixture',
         payout_other_deductions: 0,
       }),
       adminA.rpc('mark_payout_paid_for_admin', {
         target_winner_id: winnerId,
-        payout_payment_date: new Date().toISOString(),
+        payout_payment_date: '2026-09-25T12:00:00.000Z',
         payout_method: 'CASH',
-        payout_reference: `E2E-PAYOUT-B-${suffix}`,
+        p_idempotency_key: `E2E-PAYOUT-${suffix}`,
+        payout_reference: `E2E-PAYOUT-${suffix}`,
         payout_notes: 'Disposable authenticated integration fixture',
         payout_other_deductions: 0,
       }),
     ])
-    expect(payoutAttempts.filter((attempt) => !attempt.error)).toHaveLength(1)
-    expect(payoutAttempts.filter((attempt) => !!attempt.error)).toHaveLength(1)
+    expect(payoutAttempts.filter((attempt) => !attempt.error)).toHaveLength(2)
+    expect(payoutAttempts.filter((attempt) => !!attempt.error)).toHaveLength(0)
 
     const { data: payout, error: payoutGetError } = await adminA.rpc('get_payout_for_admin', {
       target_winner_id: winnerId,
@@ -235,6 +237,26 @@ describe('Kuri-App positive end-to-end workflow', () => {
     expect(payout[0].payout_id).toBe(payoutId)
     expect(payout[0].status).toBe('PAID')
     expect(payout[0].net_amount).toBe(100)
+    expect(payout[0].expense_deductions).toBe(0)
+
+    const { data: enrollmentClosedAt, error: enrollmentCloseError } = await adminA.rpc(
+      'close_kuri_enrollment_for_admin',
+      { target_kuri_id: kuriId },
+    )
+    expect(enrollmentCloseError).toBeNull()
+    expect(enrollmentClosedAt).toBeTruthy()
+
+    const { data: changedPayout, error: changedPayoutError } = await adminA.rpc('mark_payout_paid_for_admin', {
+      target_winner_id: winnerId,
+      payout_payment_date: '2026-09-25T12:00:00.000Z',
+      payout_method: 'CASH',
+      p_idempotency_key: `E2E-PAYOUT-${suffix}`,
+      payout_reference: `E2E-PAYOUT-DIFFERENT-${suffix}`,
+      payout_notes: 'Disposable authenticated integration fixture',
+      payout_other_deductions: 0,
+    })
+    expect(changedPayout).toBeNull()
+    expect(changedPayoutError?.message).toContain('Idempotency key was already used for a different payout request.')
 
     const { data: finalKuri, error: finalKuriError } = await adminA.rpc(
       'transition_kuri_status_for_admin',
