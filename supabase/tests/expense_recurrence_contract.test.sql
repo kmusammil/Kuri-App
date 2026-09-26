@@ -1,7 +1,7 @@
 -- Expense recurrence contract coverage (pgTAP)
 begin;
 
-select plan(18);
+select plan(21);
 
 select ok(
   exists (
@@ -160,6 +160,38 @@ select ok(
   =
   (select count(*) from public.expense_obligations where occurrence_date is not null),
   'existing recurring obligation rows are internally queryable'
+);
+
+select ok(
+  has_function_privilege(
+    'anon',
+    'public.create_expense_rule_for_admin(uuid,text,text,public.expense_frequency,bigint,public.expense_recurrence_pattern,integer,date,date,date[],boolean)',
+    'EXECUTE'
+  ) = false,
+  'recurrence-aware Expense creation is not executable by anon'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.create_expense_rule_for_admin(uuid,text,text,public.expense_frequency,bigint,public.expense_recurrence_pattern,integer,date,date,date[],boolean)',
+    'EXECUTE'
+  ) = true,
+  'recurrence-aware Expense creation is executable by authenticated users'
+);
+
+select ok(
+  has_function_privilege(
+    'anon',
+    'public.generate_expense_obligations_for_rule(uuid,date)',
+    'EXECUTE'
+  ) = false
+  and has_function_privilege(
+    'anon',
+    'public.generate_expense_obligations_for_membership_rule(uuid,uuid,date)',
+    'EXECUTE'
+  ) = false,
+  'internal Expense generators are not executable by anon'
 );
 
 select * from finish();
