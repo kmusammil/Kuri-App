@@ -152,7 +152,7 @@ export default async function KuriDetailPage({
             <dl className="mt-4 space-y-3 text-sm">
               <div className="flex justify-between gap-4"><dt className="text-slate-500">Installment</dt><dd className="font-medium">₹{kuri.installment_amount.toLocaleString("en-IN")}</dd></div>
               <div className="flex justify-between gap-4"><dt className="text-slate-500">Gross prize</dt><dd className="font-medium">₹{kuri.gross_prize_amount.toLocaleString("en-IN")}</dd></div>
-              <div className="flex justify-between gap-4"><dt className="text-slate-500">Muppu</dt><dd className="font-medium">₹{kuri.muppu_amount.toLocaleString("en-IN")}</dd></div>
+              <div className="flex justify-between gap-4"><dt className="text-slate-500">Expense</dt><dd className="font-medium">Managed through Expense rules</dd></div>
               <div className="flex justify-between gap-4"><dt className="text-slate-500">Due day</dt><dd className="font-medium">Day {kuri.due_day}</dd></div>
               <div className="flex justify-between gap-4"><dt className="text-slate-500">Draw day</dt><dd className="font-medium">Day {kuri.draw_day}</dd></div>
             </dl>
