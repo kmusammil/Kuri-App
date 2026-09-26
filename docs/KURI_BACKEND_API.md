@@ -1,14 +1,14 @@
 # Kuri-App Backend API Surface
 
-Status: canonical API inventory for the current Supabase production database; updated during the 2026-09-25 ledger-driven backend update.
+Status: canonical API inventory for the current Supabase production database; updated during the 2026-09-26 ledger-driven backend update.
 
 ## Exposure model
 
 Client calls use Supabase Auth + PostgREST RPCs. Every client-facing mutation below is an authenticated application API operation. Authorization is enforced inside the function and is scoped to the target Kuri where the operation is Kuri-specific; organization context remains explicit for organization-level operations.
 
-Security-definer is intentional for the client-facing admin RPCs because these functions centralize privileged mutations and reads behind explicit authorization and validation. Supabase's advisor flags them because they are reachable by the authenticated role; that warning is treated as a reviewed, intentional API exposure. The live reviewed authenticated SECURITY DEFINER surface is now 95 functions.
+Security-definer is intentional for the client-facing admin RPCs because these functions centralize privileged mutations and reads behind explicit authorization and validation. Supabase's advisor flags them because they are reachable by the authenticated role; that warning is treated as a reviewed, intentional API exposure. The live reviewed authenticated SECURITY DEFINER surface is now 116 functions.
 
-Anonymous execution is disabled for all exposed security-definer RPCs.
+Anonymous execution is disabled for all client-facing business RPCs. Three remaining anonymous-callable SECURITY DEFINER functions are internal trigger helpers and are not part of the client API contract; they are reserved for the final internal-function security sweep.
 
 The three lifecycle transition RPCs are authenticated application APIs for ADMIN/MAIN_ADMIN callers. They remain protected by auth.uid(), organization/role checks, row locking, and the domain state-transition guards:
 - transition_kuri_status_for_admin(uuid, kuri_status)
@@ -90,17 +90,13 @@ Lifecycle state changes are exposed through the authenticated transition RPCs ab
 - finalize_draw_for_admin(uuid,uuid[],text) -> integer — requires an idempotency key; completed retries return the existing winner count, while a reused key with a different winner payload is rejected. Final selection must come from current draw selections, must contain distinct persons, cannot repeat a prior winner in the Kuri, and is bounded by `Maximum winners = M - (C - 1)`. The legacy 2-argument overload is removed.
 - get_monthly_winners_for_admin(uuid) -> setof record
 
-### Payouts and Muppu
-- prepare_payout_for_admin(uuid) -> uuid — recomputes pending payout deductions from linked `DEDUCTED_FROM_PRIZE` Expense obligations while preserving terminal payout rows.
+### Payouts and Expenses
+- prepare_payout_for_admin(uuid) -> uuid — recomputes pending payout deductions only from linked `DEDUCTED_FROM_PRIZE` Expense obligations while preserving terminal payout rows; new payout preparation carries no legacy Muppu component.
 - mark_payout_paid_for_admin(uuid,timestamptz,payment_method,text,text,text,bigint) -> void — Kuri-scoped payout payment with required idempotency key; retries of the same request replay safely, while the same key with a different payload is rejected.
 - get_payout_for_admin(uuid) -> setof record — includes `expense_deductions` as a distinct payout component.
 - list_payouts_for_admin(uuid) -> setof record — includes `expense_deductions` as a distinct payout component.
 - audit_financial_ledger_for_admin(uuid) -> setof record — explicit Kuri scope.
-- create_muppu_record_for_admin(uuid,uuid,uuid,bigint) -> uuid
-- list_muppu_records_for_admin(uuid,uuid) -> setof record
-- mark_muppu_paid_for_admin(uuid,text,timestamptz) -> void
-- waive_muppu_for_admin(uuid,text) -> void
-- deduct_muppu_from_prize_for_admin(uuid,text) -> void
+- list_muppu_records_for_admin(uuid,uuid) -> setof record — read-only legacy history during migration to Expenses.
 
 ### Membership exits and settlements
 - create_membership_exit_for_admin(uuid,settlement_reason,date,refund_policy,bigint,text,text) -> uuid — explicit idempotency key
@@ -175,13 +171,13 @@ Existing completed/cancelled cycle history is not recreated for new per-cycle ru
 
 ## Payout Expense accounting
 
-Payout net amount is constrained as `max(gross_amount - muppu_amount - expense_deductions - other_deductions, 0)`. Generalized Expense deductions are stored separately from legacy Muppu and manually supplied other deductions. A prize Expense can be attached only while the payout is `PENDING`; payout preparation re-derives the linked Expense total from `DEDUCTED_FROM_PRIZE` obligations, preventing stale net amounts.
+Payout net amount is constrained as `max(gross_amount - muppu_amount - expense_deductions - other_deductions, 0)`. `muppu_amount` remains only as a compatibility field for historical payout rows; new payout preparation sets it to zero. Canonical deductions are represented by `expense_deductions` and explicitly linked Expense obligations. A prize Expense can be attached only while the payout is `PENDING`; payout preparation re-derives the linked Expense total from `DEDUCTED_FROM_PRIZE` obligations, preventing stale net amounts.
 
 
 
 ## Membership exit, death settlement, and succession
 
-Exit lifecycle: `ACTIVE/SUSPENDED -> PENDING -> APPROVED -> SETTLED -> EXITED`. A `PENDING` exit does not change membership status or remove the member from ordinary operations; cancellation preserves the historical exit request. Creating an exit request does not make the membership exited; pending members remain operational. Cancellation preserves the historical exit row and allows a later request. Exit settlement recalculates financials from `calculate_membership_exit_financials`, using effective payment/allocation values and the ledger’s pre-win/post-win, Expense, Muppu and request/death cutoff rules.
+Exit lifecycle: `ACTIVE/SUSPENDED -> PENDING -> APPROVED -> SETTLED -> EXITED`. A `PENDING` exit does not change membership status or remove the member from ordinary operations; cancellation preserves the historical exit request. Creating an exit request does not make the membership exited; pending members remain operational. Cancellation preserves the historical exit row and allows a later request. Exit settlement recalculates financials from `calculate_membership_exit_financials`, using effective payment/allocation values and the ledger’s pre-win/post-win, Expense, and request/death cutoff rules. The legacy Muppu component is no longer subtracted separately.
 
 Canonical mutation APIs:
 - `create_membership_exit_for_admin(membership_id, reason, exit_date, refund_policy, refund_amount, notes, idempotency_key)`
