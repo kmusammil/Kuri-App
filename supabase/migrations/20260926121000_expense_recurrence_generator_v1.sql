@@ -143,7 +143,7 @@ begin
       and m.status='ACTIVE'
       and not exists (
         select 1 from public.membership_exits me
-        where me.membership_id=me.membership_id
+        where me.membership_id=m.id
           and me.status in ('PENDING','APPROVED')
       )
     on conflict do nothing;
