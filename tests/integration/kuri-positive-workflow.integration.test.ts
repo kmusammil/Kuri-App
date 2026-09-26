@@ -49,9 +49,11 @@ describe('Kuri-App positive end-to-end workflow', () => {
       due_day: 28,
       draw_day: 28,
       gross_prize_amount: 100,
-      muppu_amount: 0,
+      expense_amount: 0,
       winner_rule: 'ALL_PERSON_MEMBERSHIPS',
       exit_refund_rule: 'AT_MATURITY',
+      frequency_value: 'MONTHLY',
+      schedule_mode_value: 'STANDARD',
     })
     expect(createKuriError).toBeNull()
     expect(createdKuri).toBeTruthy()
