@@ -88,9 +88,9 @@ export default async function PayoutDetailPage({
             </p>
           </div>
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Muppu</p>
+            <p className="text-sm text-slate-500">Expense deductions</p>
             <p className="mt-2 text-xl font-semibold">
-              ₹{Number(payout.muppu_amount).toLocaleString("en-IN")}
+              ₹{Number(payout.expense_deductions ?? 0).toLocaleString("en-IN")}
             </p>
           </div>
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
