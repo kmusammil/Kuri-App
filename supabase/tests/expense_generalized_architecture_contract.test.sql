@@ -2,7 +2,7 @@
 
 begin;
 
-select plan(8);
+select plan(9);
 
 select ok(
   exists (
@@ -17,8 +17,8 @@ select ok(
   (select count(*) from pg_enum e join pg_type t on t.oid=e.enumtypid
    join pg_namespace n on n.oid=t.typnamespace
    where n.nspname='public' and t.typname='expense_frequency'
-     and e.enumlabel in ('ONE_TIME','PER_CYCLE')) = 2,
-  'Expense supports one-time and per-cycle rules'
+     and e.enumlabel in ('ONE_TIME','RECURRING')) = 2,
+  'Expense supports one-time and recurring rules'
 );
 
 select ok(
@@ -70,6 +70,16 @@ select ok(
       and c.conname='expense_obligations_settlement_shape'
   ),
   'Expense obligation settlement shape is database-enforced'
+);
+
+select ok(
+  exists (
+    select 1 from pg_constraint
+    where conrelid='public.expense_rules'::regclass
+      and conname='expense_rules_recurrence_shape'
+      and pg_get_constraintdef(oid) ilike '%RECURRING%'
+  ),
+  'Expense recurrence shape uses canonical recurring frequency'
 );
 
 select * from finish();
