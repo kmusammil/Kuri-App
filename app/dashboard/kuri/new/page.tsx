@@ -108,8 +108,8 @@ export default async function NewKuriPage({
                   <input id="gross_prize_amount" name="gross_prize_amount" type="number" min="0" required placeholder="300000" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label htmlFor="muppu_amount" className="block text-sm font-medium">Muppu per winning membership (₹)</label>
-                  <input id="muppu_amount" name="muppu_amount" type="number" min="0" required defaultValue="0" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                  <label htmlFor="expense_amount" className="block text-sm font-medium">Expense per winning membership (₹)</label>
+                  <input id="expense_amount" name="expense_amount" type="number" min="0" required defaultValue="0" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
                 </div>
                 <div>
                   <label htmlFor="winner_rule" className="block text-sm font-medium">Winner rule</label>
