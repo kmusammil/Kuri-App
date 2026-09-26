@@ -97,16 +97,22 @@ describe('Kuri-App authenticated API boundary', () => {
 
   it('rejects a cross-tenant payment mutation before mutation', async () => {
     const { data, error } = await rpc(adminA, 'create_payment_for_admin', {
+      target_kuri_id: env('TEST_KURI_A_ID'),
       target_person_id: env('TEST_PERSON_B_ID'), payment_amount: 1, payment_date: new Date().toISOString(),
-      payment_method: 'OTHER', payment_reference: 'AUTH-INTEGRATION-CROSS-TENANT', payment_notes: 'Must be rejected by tenancy boundary.'
+      payment_method: 'OTHER', payment_reference: 'AUTH-INTEGRATION-CROSS-TENANT',
+      payment_notes: 'Must be rejected by tenancy boundary.',
+      p_idempotency_key: 'AUTH-CROSS-TENANT-PAYMENT'
     })
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
 
   it('rejects an unauthenticated admin mutation', async () => {
     const { data, error } = await rpc(anonymous, 'create_payment_for_admin', {
+      target_kuri_id: env('TEST_KURI_A_ID'),
       target_person_id: env('TEST_PERSON_A_ID'), payment_amount: 1, payment_date: new Date().toISOString(),
-      payment_method: 'OTHER', payment_reference: 'AUTH-INTEGRATION-ANON', payment_notes: 'Must be rejected without JWT.'
+      payment_method: 'OTHER', payment_reference: 'AUTH-INTEGRATION-ANON',
+      payment_notes: 'Must be rejected without JWT.',
+      p_idempotency_key: 'AUTH-ANON-PAYMENT'
     })
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
@@ -177,11 +183,13 @@ describe('Kuri-App authenticated API boundary', () => {
     const results = await Promise.all([
       rpc(adminA, 'create_payment_for_admin', {
         target_person_id: env('TEST_PERSON_A_ID'), payment_amount: 0, payment_date: new Date().toISOString(),
-        payment_method: 'OTHER', payment_reference: 'AUTH-NONPOSITIVE-0', payment_notes: 'Must be rejected.'
+        payment_method: 'OTHER', payment_reference: 'AUTH-NONPOSITIVE-0', payment_notes: 'Must be rejected.',
+        target_kuri_id: env('TEST_KURI_A_ID'), p_idempotency_key: 'AUTH-NONPOSITIVE-0-KEY'
       }),
       rpc(adminA, 'create_payment_for_admin', {
         target_person_id: env('TEST_PERSON_A_ID'), payment_amount: -1, payment_date: new Date().toISOString(),
-        payment_method: 'OTHER', payment_reference: 'AUTH-NONPOSITIVE-NEG', payment_notes: 'Must be rejected.'
+        payment_method: 'OTHER', payment_reference: 'AUTH-NONPOSITIVE-NEG', payment_notes: 'Must be rejected.',
+        target_kuri_id: env('TEST_KURI_A_ID'), p_idempotency_key: 'AUTH-NONPOSITIVE-NEG-KEY'
       }),
     ])
     for (const result of results) { expect(result.data).toBeNull(); expect(result.error).not.toBeNull() }
@@ -192,6 +200,7 @@ describe('Kuri-App authenticated API boundary', () => {
       target_payment_id: '00000000-0000-0000-0000-000000000001',
       target_installment_id: '00000000-0000-0000-0000-000000000002',
       allocation_amount: 1,
+      p_idempotency_key: 'AUTH-UNKNOWN-ALLOCATION',
     })
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
@@ -249,6 +258,7 @@ describe('Kuri-App authenticated API boundary', () => {
       target_refund_policy: 'IMMEDIATE',
       target_refund_amount: 0,
       target_notes: 'Must be rejected.',
+      p_idempotency_key: 'AUTH-UNKNOWN-EXIT',
     })
     expect(data).toBeNull(); expect(error).not.toBeNull()
   })
@@ -333,4 +343,154 @@ describe('Kuri-App authenticated API boundary', () => {
     expect(updateResult.error).not.toBeNull()
   })
 
+
+  it('requires an idempotency key for exit creation', async () => {
+    const { data, error } = await rpc(adminA, 'create_membership_exit_for_admin', {
+      target_membership_id: env('TEST_MEMBERSHIP_A_ID'),
+      exit_reason: 'VOLUNTARY_EXIT',
+      target_exit_date: new Date().toISOString().slice(0, 10),
+      target_refund_policy: 'AT_MATURITY',
+      target_refund_amount: 0,
+      target_notes: 'Must fail without an idempotency key.',
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('requires an idempotency key for exit settlement', async () => {
+    const { data, error } = await rpc(adminA, 'settle_membership_exit_for_admin', {
+      target_exit_id: '00000000-0000-0000-0000-000000000001',
+      settlement_payment_method: 'WAIVED',
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('requires an idempotency key for immediate exit refunds', async () => {
+    const { data, error } = await rpc(adminA, 'record_membership_exit_refund_for_admin', {
+      target_exit_id: '00000000-0000-0000-0000-000000000001',
+      refund_amount: 1,
+      refund_payment_method: 'OTHER',
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('requires verified death before death settlement', async () => {
+    const { data, error } = await rpc(adminA, 'record_death_settlement_for_admin', {
+      target_exit_id: '00000000-0000-0000-0000-000000000001',
+      target_nominee_id: '00000000-0000-0000-0000-000000000002',
+      p_settlement_notes: 'Must be rejected.',
+      p_idempotency_key: 'AUTH-DEATH-VERIFY-GATE',
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('blocks an Org B admin from creating an Org A exit', async () => {
+    const { data, error } = await rpc(adminB, 'create_membership_exit_for_admin', {
+      target_membership_id: env('TEST_MEMBERSHIP_A_ID'),
+      exit_reason: 'VOLUNTARY_EXIT',
+      target_exit_date: new Date().toISOString().slice(0, 10),
+      target_refund_policy: 'AT_MATURITY',
+      target_refund_amount: 0,
+      target_notes: 'Cross-tenant must be rejected.',
+      p_idempotency_key: 'AUTH-CROSS-TENANT-EXIT-2',
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('blocks anonymous exit and succession mutations', async () => {
+    const results = await Promise.all([
+      rpc(anonymous, 'create_membership_exit_for_admin', {
+        target_membership_id: env('TEST_MEMBERSHIP_A_ID'),
+        exit_reason: 'VOLUNTARY_EXIT',
+        target_exit_date: new Date().toISOString().slice(0, 10),
+        target_refund_policy: 'AT_MATURITY',
+        target_refund_amount: 0,
+        target_notes: 'Must be rejected.',
+        p_idempotency_key: 'AUTH-ANON-EXIT-2',
+      }),
+      rpc(anonymous, 'verify_death_date_for_admin', {
+        target_exit_id: '00000000-0000-0000-0000-000000000001',
+        verified_death_date: new Date().toISOString().slice(0, 10),
+      }),
+      rpc(anonymous, 'record_membership_succession_for_admin', {
+        target_exit_id: '00000000-0000-0000-0000-000000000001',
+        target_nominee_id: '00000000-0000-0000-0000-000000000002',
+        p_idempotency_key: 'AUTH-ANON-SUCCESSION-2',
+      }),
+    ])
+    for (const result of results) {
+      expect(result.data).toBeNull(); expect(result.error).not.toBeNull()
+    }
+  })
+
+  it('blocks direct Data API writes to succession and current-holder state', async () => {
+    const successionWrite = await adminA.from('membership_successions').insert({
+      membership_id: env('TEST_MEMBERSHIP_A_ID'),
+      membership_exit_id: '00000000-0000-0000-0000-000000000001',
+      original_person_id: env('TEST_PERSON_A_ID'),
+      successor_person_id: env('TEST_PERSON_B_ID'),
+      nominee_id: '00000000-0000-0000-0000-000000000002',
+    }).select()
+    expect(successionWrite.data).toBeNull(); expect(successionWrite.error).not.toBeNull()
+
+    const holderWrite = await adminA.from('memberships')
+      .update({ current_holder_person_id: env('TEST_PERSON_B_ID') })
+      .eq('id', env('TEST_MEMBERSHIP_A_ID'))
+      .select()
+    expect(holderWrite.data).toBeNull(); expect(holderWrite.error).not.toBeNull()
+  })
+
+  it('blocks cross-tenant nominee-successor linking', async () => {
+    const { data, error } = await rpc(adminB, 'link_nominee_to_successor_person_for_admin', {
+      target_membership_id: env('TEST_MEMBERSHIP_A_ID'),
+      target_nominee_id: '00000000-0000-0000-0000-000000000002',
+      target_successor_person_id: env('TEST_PERSON_B_ID'),
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('blocks succession before a settled death case', async () => {
+    const { data, error } = await rpc(adminA, 'record_membership_succession_for_admin', {
+      target_exit_id: '00000000-0000-0000-0000-000000000001',
+      target_nominee_id: '00000000-0000-0000-0000-000000000002',
+      succession_notes: 'Must be rejected.',
+    })
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
+
+  it('blocks direct writes to exit financial records', async () => {
+    const exitWrite = await adminA.from('membership_exits')
+      .update({ refund_amount: 999 })
+      .eq('id', '00000000-0000-0000-0000-000000000001')
+      .select()
+    expect(exitWrite.data).toBeNull(); expect(exitWrite.error).not.toBeNull()
+
+    const refundWrite = await adminA.from('membership_exit_refund_transactions').insert({
+      membership_exit_id: '00000000-0000-0000-0000-000000000001',
+      amount: 1,
+      payment_method: 'OTHER',
+    }).select()
+    expect(refundWrite.data).toBeNull(); expect(refundWrite.error).not.toBeNull()
+  })
+
+  it('blocks verified-death settlement context across tenants', async () => {
+    const { data, error } = await rpc(adminB, 'get_death_settlement_context_for_admin', {
+      target_membership_id: env('TEST_MEMBERSHIP_A_ID'),
+    })
+    expect(error).toBeNull(); expect(Array.isArray(data)).toBe(true); expect(data).toHaveLength(0)
+  })
+
+  it('blocks cross-tenant exit list reads', async () => {
+    const { data, error } = await rpc(adminB, 'list_membership_exits_for_admin', {
+      target_kuri_id: env('TEST_KURI_A_ID'),
+    })
+    expect(error).toBeNull(); expect(Array.isArray(data)).toBe(true); expect(data).toHaveLength(0)
+  })
+
+  it('blocks direct nominee successor field writes', async () => {
+    const { data, error } = await adminA.from('nominees')
+      .update({ successor_person_id: env('TEST_PERSON_B_ID') })
+      .eq('id', '00000000-0000-0000-0000-000000000002')
+      .select()
+    expect(data).toBeNull(); expect(error).not.toBeNull()
+  })
 })
