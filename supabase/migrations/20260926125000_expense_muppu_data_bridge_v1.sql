@@ -109,6 +109,7 @@ BEGIN
           AND m2.id <> m.id
       )
     ON CONFLICT (expense_rule_id, membership_id, occurrence_date)
+      WHERE occurrence_date IS NOT NULL
     DO NOTHING;
 
     IF EXISTS (
