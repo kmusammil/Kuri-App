@@ -20,7 +20,7 @@ export async function createKuri(formData: FormData) {
   const dueDay = Number(formData.get("due_day"));
   const drawDay = Number(formData.get("draw_day"));
   const grossPrizeAmount = Number(formData.get("gross_prize_amount"));
-  const muppuAmount = Number(formData.get("muppu_amount"));
+  const expenseAmount = Number(formData.get("expense_amount"));
 
   if (
     !name ||
@@ -39,8 +39,8 @@ export async function createKuri(formData: FormData) {
     drawDay > 31 ||
     !Number.isInteger(grossPrizeAmount) ||
     grossPrizeAmount < 0 ||
-    !Number.isInteger(muppuAmount) ||
-    muppuAmount < 0
+    !Number.isInteger(expenseAmount) ||
+    expenseAmount < 0
   ) {
     redirect("/dashboard?error=Please%20enter%20valid%20Kuri%20details.");
   }
@@ -59,30 +59,28 @@ export async function createKuri(formData: FormData) {
     redirect("/workspace?error=Create%20a%20workspace%20before%20creating%20a%20Kuri.");
   }
 
-  const { data: kuri, error } = await supabase
-    .from("kuris")
-    .insert({
-      organization_id: organizationMembership.organization_id,
-      name,
-      start_date: startDate,
-      number_of_cycles: numberOfCycles,
-      membership_limit: membershipLimit,
-      installment_amount: installmentAmount,
-      frequency: "MONTHLY",
-      due_day: dueDay,
-      draw_day: drawDay,
-      gross_prize_amount: grossPrizeAmount,
-      muppu_amount: muppuAmount,
-      status: "DRAFT",
-    })
-    .select("id")
-    .single();
+  const { data: kuriId, error } = await supabase.rpc("create_kuri_for_admin", {
+    name,
+    description: null,
+    start_date: startDate,
+    number_of_cycles: numberOfCycles,
+    membership_limit: membershipLimit,
+    installment_amount: installmentAmount,
+    due_day: dueDay,
+    draw_day: drawDay,
+    gross_prize_amount: grossPrizeAmount,
+    expense_amount: expenseAmount,
+    winner_rule: "ALL_PERSON_MEMBERSHIPS",
+    exit_refund_rule: "AT_MATURITY",
+    frequency_value: "MONTHLY",
+    schedule_mode_value: "STANDARD",
+  });
 
-  if (error || !kuri) {
+  if (error || !kuriId) {
     console.error("createKuri failed:", error);
     redirect("/dashboard?error=Unable%20to%20create%20Kuri.");
   }
 
   revalidatePath("/dashboard");
-  redirect(`/dashboard/kuri/${kuri.id}`);
+  redirect(`/dashboard/kuri/${kuriId}`);
 }
