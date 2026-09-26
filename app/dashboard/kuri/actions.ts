@@ -26,7 +26,7 @@ export async function createKuri(formData: FormData) {
   const dueDay = toInteger(formData.get("due_day"));
   const drawDay = toInteger(formData.get("draw_day"));
   const grossPrizeAmount = toInteger(formData.get("gross_prize_amount"));
-  const muppuAmount = toInteger(formData.get("muppu_amount"));
+  const expenseAmount = toInteger(formData.get("expense_amount"));
   const winnerRule = String(
     formData.get("winner_rule") ?? "ALL_PERSON_MEMBERSHIPS",
   );
@@ -51,8 +51,8 @@ export async function createKuri(formData: FormData) {
     drawDay > 31 ||
     !Number.isInteger(grossPrizeAmount) ||
     grossPrizeAmount < 0 ||
-    !Number.isInteger(muppuAmount) ||
-    muppuAmount < 0
+    !Number.isInteger(expenseAmount) ||
+    expenseAmount < 0
   ) {
     redirect(
       "/dashboard/kuri/new?error=Please%20enter%20valid%20Kuri%20details.",
@@ -69,7 +69,9 @@ export async function createKuri(formData: FormData) {
     due_day: dueDay,
     draw_day: drawDay,
     gross_prize_amount: grossPrizeAmount,
-    muppu_amount: muppuAmount,
+    expense_amount: expenseAmount,
+    frequency_value: "MONTHLY",
+    schedule_mode_value: "STANDARD",
     winner_rule: winnerRule,
     exit_refund_rule: exitRefundRule,
   });
