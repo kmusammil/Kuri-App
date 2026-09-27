@@ -25,7 +25,7 @@ GitHub-only changes do not require a Supabase migration.
 1. Admin Position Request workflow — COMPLETE
 2. Kuri Announcement workflow — COMPLETE
 3. Admin Security Event workflow — COMPLETE
-4. Membership capacity/resource ceiling — NEXT
+4. Membership capacity/resource ceiling — PARTIAL (live complete; GitHub migration drift)
 5. Remaining organization/authority work — DEFERRED
 6. Expense/late-fee verification — VERIFY/HARDEN
 7. Financial/state-machine verification — VERIFY/HARDEN
@@ -141,9 +141,28 @@ Verification completed:
 - ordinary audit action produced no security event and no ADMIN_SECURITY event
 - smoke-test rows rolled back; no test security-event data remains
 
-### 4. Membership capacity/resource ceiling — NEXT
+### 4. Membership capacity/resource ceiling — PARTIAL (live complete; GitHub migration drift)
 
-Existing membership_limit enforcement remains. Add a system-wide maximum membership_limit, define a safe maximum, evaluate membership × cycles × installments amplification, and harden mass-membership/resource-abuse protection.
+Live Supabase already contains the capacity/resource controls required for this checkpoint; no new production capacity feature was added.
+
+Verified live:
+- system-wide limits: 250 members/Kuri, 36 cycles/Kuri, 10 Kuris/organization
+- Kuri creation/update trigger enforces membership_limit, number_of_cycles and organization Kuri ceiling
+- organization row locking makes the Kuri-count ceiling race-safe
+- membership creation locks the target Kuri before counting memberships
+- per-actor membership creation rate limits: 20/10 minutes and 100/hour per Kuri
+- per-actor Person creation rate limits: 20/10 minutes and 100/hour per organization
+- Person creation path invokes the rate limiter after organization-admin authorization
+- membership creation path invokes the rate limiter after Kuri-admin authorization
+- creation-volume admin monitoring exists
+- rate-limit/capacity internal functions are SECURITY DEFINER with fixed search_path and are not executable by anon/authenticated callers
+- capacity/rate-limit tables have RLS enabled with no client policies, so direct Data API access is denied
+
+Remaining:
+- The corresponding capacity/rate-limit migrations are present in live Supabase migration history but are absent from current GitHub main. This is migration drift and is therefore deferred to checkpoint 11 (Migration reconciliation) rather than recreated here.
+- create_kuri_for_admin still accepts membership_limit up to 1000 in its own validation while the enforced live system ceiling is 250. The trigger prevents bypass, so this is a contract-validation inconsistency rather than a capacity bypass. It should be reconciled with the canonical system limit during migration/API contract hardening.
+
+No Supabase schema change was made in this checkpoint.
 
 ### 5. Remaining organization/authority work — DEFERRED
 
