@@ -35,7 +35,7 @@ Canonical recipient/timing specification for the current notification event cata
 | DEATH_REPORT | REQUEST | Immediate | Main Admin org; Admin Kuri; current holder | Event-specific | Invitation/claim | Policy only; producer not yet wired |
 | DEATH_VERIFICATION | REQUEST | Immediate | Main Admin org; Admin Kuri; current holder | Event-specific | Invitation/claim | Domain producer wired |
 | SUCCESSION | REQUEST | Immediate | Main Admin org; Admin Kuri; current holder; successor | Event-specific | Invitation/claim | Domain producer wired |
-| ADMIN_POSITION_REQUEST | REQUEST | Immediate | Main Admin org; Admin org | Exclude requester | No app notification | Policy only; producer not yet wired |
+| ADMIN_POSITION_REQUEST | REQUEST | Immediate | Main Admin org; Admin org | Exclude requester | No app notification | Domain producer wired on request creation |
 | JOIN_REQUEST | REQUEST | Immediate | Main Admin org; Admin Kuri | Exclude requester | Invitation/claim | Policy only; producer not yet wired |
 | INVITATION_RESPONSE | REQUEST | Immediate | Main Admin org; Admin Kuri | Event-specific | No app notification | Policy only; producer not yet wired |
 | KURI_SCHEDULE_CHANGED | LIFECYCLE | Immediate | Main Admin org; Admin Kuri; Kuri members | Exclude actor | Invitation/claim | Policy only; producer not yet wired |
