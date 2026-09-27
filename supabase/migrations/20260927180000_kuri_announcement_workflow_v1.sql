@@ -49,7 +49,7 @@ create table public.kuri_announcements (
       or
       (status = 'WITHDRAWN' and withdrawn_at is not null)
       or
-      (status = 'EXPIRED' and published_at is not null and expires_at is not null)
+      (status = 'EXPIRED' and expires_at is not null)
     ),
   constraint kuri_announcements_expiry_check
     check (expires_at is null or scheduled_at is null or expires_at > scheduled_at),
@@ -442,14 +442,10 @@ begin
     end,
     published_at=case
       when expires_at is not null and expires_at <= now()
-        then nullif(published_at,published_at)
+        then published_at
       else coalesce(published_at,now())
     end,
-    scheduled_at=case
-      when expires_at is not null and expires_at <= now()
-        then scheduled_at
-      else null
-    end,
+    scheduled_at=null,
     updated_at=now()
   where status='SCHEDULED'
     and scheduled_at <= now();
