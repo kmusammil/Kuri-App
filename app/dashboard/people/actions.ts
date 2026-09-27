@@ -4,6 +4,20 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
+function normalizePersonName(value: string) {
+  return value.trim().normalize("NFC");
+}
+
+function isValidPersonName(value: string) {
+  const normalized = normalizePersonName(value);
+  return (
+    normalized.length > 0 &&
+    Array.from(normalized).length <= 200 &&
+    /\\p{L}/u.test(normalized) &&
+    !/\\p{Cc}/u.test(normalized)
+  );
+}
+
 export async function createPerson(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -25,15 +39,27 @@ export async function createPerson(formData: FormData) {
     redirect("/dashboard?error=You%20do%20not%20have%20permission%20to%20add%20people.");
   }
 
-  const registeredName = String(formData.get("registered_name") ?? "").trim();
-  const displayName = String(formData.get("display_name") ?? "").trim();
+  const registeredName = normalizePersonName(
+    String(formData.get("registered_name") ?? ""),
+  );
+  const displayName = normalizePersonName(
+    String(formData.get("display_name") ?? ""),
+  );
   const address = String(formData.get("address") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
 
-  if (!registeredName) {
-    redirect("/dashboard/people/new?error=Registered%20name%20is%20required.");
+  if (!isValidPersonName(registeredName)) {
+    redirect(
+      "/dashboard/people/new?error=Enter%20a%20valid%20Unicode%20name%20(1-200%20characters).",
+    );
+  }
+
+  if (displayName && !isValidPersonName(displayName)) {
+    redirect(
+      "/dashboard/people/new?error=Enter%20a%20valid%20display%20name%20(1-200%20characters).",
+    );
   }
 
   const { data: personId, error: personError } = await supabase.rpc(
