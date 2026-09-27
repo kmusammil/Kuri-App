@@ -296,10 +296,11 @@ begin
 
   if not exists (
     select 1
-    from public.users u
-    where u.id = target_user_id
+    from public.organization_users ou
+    where ou.organization_id = v_event.organization_id
+      and ou.user_id = target_user_id
   ) then
-    raise exception 'Notification recipient not found.';
+    raise exception 'Notification recipient is not a member of this organization.';
   end if;
 
   insert into public.notifications(
