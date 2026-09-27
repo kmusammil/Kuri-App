@@ -41,7 +41,7 @@ export default async function NewKuriPage({
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Kuri-App</p>
             <h1 className="mt-2 text-3xl font-bold tracking-tight">Create Kuri</h1>
-            <p className="mt-2 text-sm text-slate-600">Set the core rules for a new monthly Kuri scheme.</p>
+            <p className="mt-2 text-sm text-slate-600">Set the core rules for a new Kuri scheme.</p>
           </div>
           <Link href="/dashboard" className="text-sm font-medium underline">Back to dashboard</Link>
         </div>
@@ -90,11 +90,11 @@ export default async function NewKuriPage({
                   <input id="installment_amount" name="installment_amount" type="number" min="0" required placeholder="10000" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label htmlFor="due_day" className="block text-sm font-medium">Monthly due day</label>
+                  <label htmlFor="due_day" className="block text-sm font-medium">Due day</label>
                   <input id="due_day" name="due_day" type="number" min="1" max="31" required placeholder="10" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label htmlFor="draw_day" className="block text-sm font-medium">Monthly draw day</label>
+                  <label htmlFor="draw_day" className="block text-sm font-medium">Draw day</label>
                   <input id="draw_day" name="draw_day" type="number" min="1" max="31" required placeholder="15" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
                 </div>
               </div>
@@ -108,8 +108,8 @@ export default async function NewKuriPage({
                   <input id="gross_prize_amount" name="gross_prize_amount" type="number" min="0" required placeholder="300000" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label htmlFor="muppu_amount" className="block text-sm font-medium">Muppu per winning membership (₹)</label>
-                  <input id="muppu_amount" name="muppu_amount" type="number" min="0" required defaultValue="0" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                  <label htmlFor="expense_amount" className="block text-sm font-medium">Expense per membership (₹)</label>
+                  <input id="expense_amount" name="expense_amount" type="number" min="0" required defaultValue="0" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
                 </div>
                 <div>
                   <label htmlFor="winner_rule" className="block text-sm font-medium">Winner rule</label>
