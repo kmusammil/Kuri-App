@@ -13,9 +13,18 @@ export async function createPayment(formData: FormData) {
   const amount = Number(formData.get("amount"));
   const paymentDate = String(formData.get("payment_date") || "").trim();
   const method = String(formData.get("method") || "").trim();
+  const parsedPaymentDate = new Date(paymentDate);
 
-  if (!personId || !Number.isInteger(amount) || amount <= 0 || !paymentDate ||
-      !["UPI", "BANK_TRANSFER", "CASH", "OTHER"].includes(method)) {
+  if (
+    !personId ||
+    !Number.isSafeInteger(amount) ||
+    amount <= 0 ||
+    !paymentDate ||
+    Number.isNaN(parsedPaymentDate.getTime()) ||
+    parsedPaymentDate.getTime() > Date.now() ||
+
+    !["UPI", "BANK_TRANSFER", "CASH", "OTHER"].includes(method)
+  ) {
     redirect("/dashboard/payments/new?error=Invalid%20payment%20details.");
   }
 
