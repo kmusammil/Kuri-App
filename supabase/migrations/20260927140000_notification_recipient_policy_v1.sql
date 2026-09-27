@@ -136,5 +136,3 @@ set category = excluded.category,
     default_channels = excluded.default_channels,
     enabled = true,
     updated_at = now();
-
-revoke all on function public.notification_event_policies from public, anon, authenticated;
