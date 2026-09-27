@@ -9,6 +9,21 @@ function toInteger(value: FormDataEntryValue | null) {
   return Number.isFinite(parsed) ? Math.trunc(parsed) : NaN;
 }
 
+function isValidKuriName(value: string) {
+  const normalized = value.trim().normalize("NFC");
+  return (
+    normalized.length > 0 &&
+    Array.from(normalized).length <= 200 &&
+    !/\\p{Cc}/u.test(normalized)
+  );
+}
+
+function isValidDateInput(value: string) {
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  const parsed = new Date(value + "T00:00:00Z");
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 export async function createKuri(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -17,8 +32,8 @@ export async function createKuri(formData: FormData) {
 
   if (!user) redirect("/login");
 
-  const name = String(formData.get("name") ?? "").trim();
-  const description = String(formData.get("description") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim().normalize("NFC");
+  const description = String(formData.get("description") ?? "").trim().normalize("NFC");
   const startDate = String(formData.get("start_date") ?? "").trim();
   const numberOfCycles = toInteger(formData.get("number_of_cycles"));
   const membershipLimit = toInteger(formData.get("membership_limit"));
@@ -35,23 +50,24 @@ export async function createKuri(formData: FormData) {
   );
 
   if (
-    !name ||
-    !startDate ||
-    !Number.isInteger(numberOfCycles) ||
+    !isValidKuriName(name) ||
+    !isValidDateInput(startDate) ||
+    !Number.isSafeInteger(numberOfCycles) ||
     numberOfCycles <= 0 ||
-    !Number.isInteger(membershipLimit) ||
+    !Number.isSafeInteger(membershipLimit) ||
     membershipLimit <= 0 ||
-    !Number.isInteger(installmentAmount) ||
+    membershipLimit > 1000 ||
+    !Number.isSafeInteger(installmentAmount) ||
     installmentAmount < 0 ||
-    !Number.isInteger(dueDay) ||
+    !Number.isSafeInteger(dueDay) ||
     dueDay < 1 ||
     dueDay > 31 ||
-    !Number.isInteger(drawDay) ||
+    !Number.isSafeInteger(drawDay) ||
     drawDay < 1 ||
     drawDay > 31 ||
-    !Number.isInteger(grossPrizeAmount) ||
+    !Number.isSafeInteger(grossPrizeAmount) ||
     grossPrizeAmount < 0 ||
-    !Number.isInteger(expenseAmount) ||
+    !Number.isSafeInteger(expenseAmount) ||
     expenseAmount < 0
   ) {
     redirect(
