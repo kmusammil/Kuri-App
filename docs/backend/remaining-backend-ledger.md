@@ -40,12 +40,41 @@ GitHub-only changes do not require a Supabase migration.
 16. Final backend freeze — FINAL
 17. Frontend/API consumers — AFTER BACKEND FREEZE
 
-### 1. Admin Position Request Workflow — NEXT
+### 1. Admin Position Request Workflow — COMPLETE
 
-Build the business workflow before connecting notifications. Define requester/approver eligibility, scope, request entity, state machine, duplicate/conflicting request protection, approval/rejection/cancellation/expiry semantics, authority changes, authorization and audit trail.
+Implemented and live-verified as an organization-scoped self-service Admin request workflow.
 
-Suggested states:
-PENDING → APPROVED / REJECTED / CANCELLED (EXPIRED only if required by final design).
+- Requester must already be an organization MEMBER.
+- Request creates an organization_admin_position_requests record for the ADMIN role.
+- Only existing organization ADMIN or MAIN_ADMIN users can approve/reject.
+- Requester cannot approve or reject their own request.
+- Approval changes the existing organization membership role MEMBER → ADMIN; it does not create a second membership.
+- Rejection requires a reason.
+- Requester can cancel a pending request.
+- Duplicate pending requests for the same organization/requester are prevented by a partial unique index.
+- Terminal states are APPROVED, REJECTED, and CANCELLED; no expiry mechanism was added because no expiration requirement exists in the current domain.
+- Direct client mutation of request records is disabled; authenticated callers use dedicated SECURITY DEFINER RPCs.
+- Audit records are written for create/approve/reject/cancel.
+- ADMIN_POSITION_REQUEST notification production is wired on request creation, using an organization-scoped internal event emitter because the existing Kuri-scoped emitter cannot represent organization-only events.
+- Existing Kuri-admin invitation/acceptance and Main Admin transfer remain separate workflows and were not modified.
+
+GitHub migration:
+supabase/migrations/20260927170917_20260927220000_admin_position_request_workflow_v1.sql
+
+Live Supabase migration history:
+version 20260927170917, name 20260927220000_admin_position_request_workflow_v1
+
+Verification completed:
+- migration present in live history
+- request table, constraints, indexes and RLS verified
+- authenticated-only RPC permissions verified
+- anonymous execution disabled
+- SECURITY DEFINER search_path=public verified
+- request → notification event → dispatcher path verified transactionally
+- duplicate pending request protection verified
+- approval/rejection/cancellation state transitions verified transactionally
+- approval role change and audit trail verified
+- smoke tests rolled back, leaving no test request/notification rows
 
 ### 2. Kuri Announcement Workflow — NEXT
 
