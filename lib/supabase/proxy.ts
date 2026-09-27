@@ -39,5 +39,8 @@ export async function updateSession(request: NextRequest) {
 
   await supabase.auth.getClaims();
 
+  // Authenticated SSR responses must not be shared through an intermediary cache.
+  supabaseResponse.headers.set("Cache-Control", "private, no-store");
+
   return supabaseResponse;
 }
