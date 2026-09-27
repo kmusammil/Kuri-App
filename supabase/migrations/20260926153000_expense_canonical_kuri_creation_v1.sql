@@ -146,8 +146,8 @@ REVOKE ALL ON FUNCTION public.create_kuri_for_admin(
 ) FROM PUBLIC, anon;
 
 GRANT EXECUTE ON FUNCTION public.create_kuri_for_admin(
-  text,text,date,integer,integer,bigint,bigint,text,public.refund_policy,
-  public.kuri_frequency,public.kuri_schedule_mode
+  text,text,date,integer,integer,bigint,integer,integer,bigint,bigint,text,
+  public.refund_policy,public.kuri_frequency,public.kuri_schedule_mode
 ) TO authenticated;
 
 COMMIT;
