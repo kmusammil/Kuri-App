@@ -24,7 +24,7 @@ GitHub-only changes do not require a Supabase migration.
 
 1. Admin Position Request workflow — COMPLETE
 2. Kuri Announcement workflow — COMPLETE
-3. Admin Security Event workflow — NEXT
+3. Admin Security Event workflow — COMPLETE
 4. Membership capacity/resource ceiling — NEXT
 5. Remaining organization/authority work — DEFERRED
 6. Expense/late-fee verification — VERIFY/HARDEN
@@ -112,9 +112,34 @@ Verification completed:
 - policy-driven notification dispatch verified with a qualifying Kuri-admin recipient
 - all smoke-test rows rolled back; no test announcement/event/notification/audit rows remain
 
-### 3. Admin Security Event Workflow — NEXT
+### 3. Admin Security Event Workflow — COMPLETE
 
-Define an explicit security-event catalog. Separate ordinary audit records from security events requiring alerts. Define event type, severity, actor, affected subject, scope, recipients, actor policy, idempotency and retention. Then connect ADMIN_SECURITY notifications. Do not turn every audit log into a notification.
+Implemented and live-verified as a dedicated security-event layer above the ordinary audit trail.
+
+- `security_event_types` is the explicit security-event catalog with severity and retention policy.
+- `security_events` stores organization scope, optional Kuri scope, event type, severity, actor, affected subject, aggregate, source audit record, payload, idempotency key, occurrence time and retention deadline.
+- Current catalog covers ADMIN_POSITION_GRANTED, ORGANIZATION_MAIN_ADMIN_TRANSFER, KURI_MAIN_ADMIN_TRANSFER and KURI_ADMIN_LEGACY_RECOVERY.
+- Ordinary audit records remain ordinary audit records; only the explicit mapped security actions become security events.
+- Audit-to-security-event production is automatic through an AFTER INSERT audit trigger.
+- Each generated security event produces `ADMIN_SECURITY` through the existing organization-scoped notification emitter and policy/dispatcher.
+- Security-event reads are restricted to organization ADMIN/MAIN_ADMIN users; direct client mutation is disabled.
+- SECURITY DEFINER internal functions use fixed `search_path=public` and are not executable by anon/authenticated callers.
+- Security-event idempotency is anchored to the source audit-log ID.
+- Retention is defined per catalog event type and materialized as `retention_until`; no destructive retention job was introduced in this checkpoint.
+
+GitHub migration:
+supabase/migrations/20260927190000_admin_security_event_workflow_v1.sql
+
+Verification completed:
+- migration applied and live schema verified
+- explicit catalog verified
+- RLS and admin-only read scope verified
+- direct mutation disabled
+- SECURITY DEFINER/search_path and anonymous execution restrictions verified
+- mapped audit action produced exactly one security event
+- mapped security event produced exactly one ADMIN_SECURITY notification event
+- ordinary audit action produced no security event and no ADMIN_SECURITY event
+- smoke-test rows rolled back; no test security-event data remains
 
 ### 4. Membership capacity/resource ceiling — NEXT
 

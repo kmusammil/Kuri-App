@@ -40,7 +40,7 @@ Canonical recipient/timing specification for the current notification event cata
 | INVITATION_RESPONSE | REQUEST | Immediate | Main Admin org; Admin Kuri | Event-specific | No app notification | Policy only; producer not yet wired |
 | KURI_SCHEDULE_CHANGED | LIFECYCLE | Immediate | Main Admin org; Admin Kuri; Kuri members | Exclude actor | Invitation/claim | Policy only; producer not yet wired |
 | KURI_ANNOUNCEMENT | BROADCAST | Immediate/broadcast | Kuri members; Main Admin org; Admin Kuri | Include | Invitation/claim | Policy only; producer not yet wired |
-| ADMIN_SECURITY | SECURITY | Immediate | Main Admin org; Admin org, event-specific filtering | Event-specific | No app notification | Policy only; producer not yet wired |
+| ADMIN_SECURITY | SECURITY | Immediate | Main Admin org; Admin org, event-specific filtering | Event-specific | No app notification | Security-event workflow wired; explicit security catalog and audit-to-event producer |
 
 ## Current implementation boundary
 
