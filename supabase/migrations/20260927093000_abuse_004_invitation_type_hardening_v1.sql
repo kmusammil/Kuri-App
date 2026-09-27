@@ -1,12 +1,24 @@
 -- ABUSE-004: Invitation abuse protection
 -- Ensure membership invitation acceptance cannot consume an administrator invitation.
--- Also constrain invitation_type to the two supported invitation classes.
+-- Keep the invitation type invariant explicit while remaining safe if it already exists
+-- in a production migration history that is ahead of the repository baseline.
 
 begin;
 
-alter table public.kuri_invitations
-  add constraint kuri_invitations_invitation_type_check
-  check (invitation_type in ('MEMBERSHIP', 'ADMIN'));
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.kuri_invitations'::regclass
+      and conname = 'kuri_invitations_invitation_type_check'
+  ) then
+    alter table public.kuri_invitations
+      add constraint kuri_invitations_invitation_type_check
+      check (invitation_type in ('MEMBERSHIP', 'ADMIN'));
+  end if;
+end
+$$;
 
 create or replace function public.accept_kuri_invitation(invitation_code text)
 returns uuid
@@ -21,9 +33,7 @@ declare
   request_id uuid;
   normalized_code text := replace(upper(trim(coalesce(invitation_code,''))),'-','');
 begin
-  if actor_id is null then
-    raise exception 'You must be signed in.';
-  end if;
+  if actor_id is null then raise exception 'You must be signed in.'; end if;
 
   select u.person_id into current_person_id
   from public.users u where u.id=actor_id;
@@ -34,27 +44,17 @@ begin
 
   select * into invitation_row
   from public.kuri_invitations i
-  where i.code_hash=encode(
-    extensions.digest(normalized_code,'sha256'),
-    'hex'
-  )
+  where i.code_hash=encode(extensions.digest(normalized_code,'sha256'),'hex')
   for update;
 
-  if not found then
-    raise exception 'Invitation code is invalid.';
-  end if;
+  if not found then raise exception 'Invitation code is invalid.'; end if;
 
   if invitation_row.invitation_type <> 'MEMBERSHIP' then
     raise exception 'This invitation is not a Kuri membership invitation.';
   end if;
 
-  if invitation_row.status <> 'PENDING' then
-    raise exception 'This invitation is no longer valid.';
-  end if;
-
-  if invitation_row.expires_at <= now() then
-    raise exception 'This invitation has expired.';
-  end if;
+  if invitation_row.status <> 'PENDING' then raise exception 'This invitation is no longer valid.'; end if;
+  if invitation_row.expires_at <= now() then raise exception 'This invitation has expired.'; end if;
 
   if invitation_row.recipient_user_id is not null
      and invitation_row.recipient_user_id <> actor_id then
@@ -72,7 +72,8 @@ begin
   end if;
 
   if not exists (
-    select 1 from public.kuris k where k.id=invitation_row.kuri_id and k.status in ('OPEN','ACTIVE')
+    select 1 from public.kuris k
+    where k.id=invitation_row.kuri_id and k.status in ('OPEN','ACTIVE')
   ) then
     raise exception 'This Kuri is not currently accepting membership.';
   end if;
