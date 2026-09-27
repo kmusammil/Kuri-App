@@ -143,7 +143,7 @@ begin
     v_key:='custom-schedule:'||new.id::text||':KURI_SCHEDULE_CHANGED:'||coalesce(new.updated_at::text,new.created_at::text);
   else
     v_kuri_id:=new.id;
-    v_actor:=new.updated_by;
+    v_actor:=auth.uid();
     v_payload:=jsonb_build_object(
       'schedule_source','kuri',
       'kuri_id',new.id,
