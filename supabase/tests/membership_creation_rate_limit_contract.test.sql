@@ -1,0 +1,14 @@
+begin;
+select plan(10);
+select has_table('public','kuri_membership_creation_rate_limits','membership rate-limit table exists');
+select has_column('public','system_capacity_limits','membership_creations_per_10_minutes','10-minute rate is centralized');
+select has_column('public','system_capacity_limits','membership_creations_per_hour','hourly rate is centralized');
+select is((select membership_creations_per_10_minutes from public.system_capacity_limits where id=true),20,'10-minute limit is 20');
+select is((select membership_creations_per_hour from public.system_capacity_limits where id=true),100,'hourly limit is 100');
+select is((select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='enforce_membership_creation_rate_limit'),1::bigint,'rate-limit helper exists');
+select ok(not has_function_privilege('anon','public.enforce_membership_creation_rate_limit(uuid)','EXECUTE'),'rate-limit helper blocks anon');
+select ok(not has_function_privilege('authenticated','public.enforce_membership_creation_rate_limit(uuid)','EXECUTE'),'rate-limit helper is internal');
+select ok(has_function_privilege('authenticated','public.create_membership_for_admin(uuid,uuid,text,text)','EXECUTE'),'membership creation remains available to authenticated clients');
+select ok(pg_get_functiondef('public.create_membership_for_admin(uuid,uuid,text,text)'::regprocedure) like '%enforce_membership_creation_rate_limit%','membership creation calls rate limiter');
+select * from finish();
+rollback;

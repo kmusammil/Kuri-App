@@ -1,0 +1,10 @@
+begin;
+select plan(6);
+select ok(exists(select 1 from pg_trigger where tgrelid='public.people'::regclass and tgname='audit_person_creation' and not tgisinternal),'person audit trigger exists');
+select ok(not has_function_privilege('anon','public.audit_person_creation()','EXECUTE'),'person audit helper blocks anon');
+select ok(not has_function_privilege('authenticated','public.audit_person_creation()','EXECUTE'),'person audit helper is internal');
+select ok(exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_creation_volume_monitoring_for_admin'),'creation monitoring RPC exists');
+select ok(has_function_privilege('authenticated','public.get_creation_volume_monitoring_for_admin(uuid,integer)','EXECUTE'),'monitoring RPC available to authenticated users');
+select ok(not has_function_privilege('anon','public.get_creation_volume_monitoring_for_admin(uuid,integer)','EXECUTE'),'monitoring RPC blocks anonymous users');
+select * from finish();
+rollback;

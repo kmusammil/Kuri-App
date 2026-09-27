@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { randomUUID } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 
 async function client() {
@@ -26,6 +27,7 @@ export async function createExit(formData: FormData) {
   const policy = String(formData.get("refund_policy") || "").trim();
   const raw = String(formData.get("refund_amount") || "").trim();
   const refund = raw ? Number(raw) : null;
+  const idempotencyKey = String(formData.get("idempotency_key") || randomUUID()).trim();
 
   const { error } = await s.rpc("create_membership_exit_for_admin", {
     target_membership_id: membershipId,
@@ -34,6 +36,7 @@ export async function createExit(formData: FormData) {
     target_refund_policy: policy,
     target_refund_amount: refund,
     target_notes: String(formData.get("notes") || "").trim() || null,
+    p_idempotency_key: idempotencyKey,
   });
 
   if (error) redirect(path(kuriId) + "?error=" + encodeURIComponent(error.message));
@@ -64,6 +67,7 @@ export async function recordImmediateRefund(formData: FormData) {
   const method = String(formData.get("refund_method") || "").trim();
   const reference = String(formData.get("refund_reference") || "").trim() || null;
   const notes = String(formData.get("refund_notes") || "").trim() || null;
+  const idempotencyKey = String(formData.get("idempotency_key") || randomUUID()).trim();
 
   const { error } = await s.rpc("record_membership_exit_refund_for_admin", {
     target_exit_id: exitId,
@@ -72,6 +76,7 @@ export async function recordImmediateRefund(formData: FormData) {
     refund_reference: reference,
     refund_paid_at: new Date().toISOString(),
     refund_notes: notes,
+    p_idempotency_key: idempotencyKey,
   });
 
   if (error) redirect(path(kuriId) + "?error=" + encodeURIComponent(error.message));
@@ -85,12 +90,14 @@ export async function settleExit(formData: FormData) {
   const kuriId = String(formData.get("kuri_id") || "").trim();
   const exitId = String(formData.get("exit_id") || "").trim();
   const reference = String(formData.get("settlement_reference") || "").trim() || null;
+  const idempotencyKey = String(formData.get("idempotency_key") || randomUUID()).trim();
 
   const { error } = await s.rpc("settle_membership_exit_for_admin", {
     target_exit_id: exitId,
     settlement_payment_method: "WAIVED",
     settlement_reference: reference,
     settlement_date: new Date().toISOString(),
+    p_idempotency_key: idempotencyKey,
   });
 
   if (error) redirect(path(kuriId) + "?error=" + encodeURIComponent(error.message));

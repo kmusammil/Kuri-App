@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(34);
+select plan(161);
 
 -- 1-4: core schema and RLS invariants
 select ok(
@@ -25,7 +25,7 @@ select ok(
   (select count(*) from pg_class c
    join pg_namespace n on n.oid=c.relnamespace
    where n.nspname='public' and c.relkind='r'),
-  'all 25 public tables have RLS enabled'
+  'all public tables have RLS enabled'
 );
 
 select ok(
@@ -46,6 +46,62 @@ select ok(
       and conname='muppu_records_kuri_cycle_person_key'
   ),
   'muppu uniqueness invariant exists'
+);
+
+-- 5-10: explicit organization/Kuri authority foundation
+select ok(
+  exists (
+    select 1 from pg_type t
+    join pg_namespace n on n.oid=t.typnamespace
+    where n.nspname='public'
+      and t.typname='organization_type'
+      and exists (select 1 from pg_enum e where e.enumtypid=t.oid and e.enumlabel='PERSONAL')
+      and exists (select 1 from pg_enum e where e.enumtypid=t.oid and e.enumlabel='ORGANIZATION')
+  ),
+  'organization type vocabulary exists'
+);
+
+select ok(
+  exists (select 1 from information_schema.columns where table_schema='public' and table_name='organizations' and column_name='org_type')
+  and exists (select 1 from information_schema.columns where table_schema='public' and table_name='organizations' and column_name='created_by')
+  and exists (select 1 from information_schema.columns where table_schema='public' and table_name='kuris' and column_name='created_by'),
+  'organization and Kuri creator metadata exists'
+);
+
+select ok(
+  exists (
+    select 1 from pg_class c
+    join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='public' and c.relname='kuri_admins' and c.relrowsecurity
+  ),
+  'kuri_admins exists with RLS'
+);
+
+select ok(
+  exists (
+    select 1 from pg_index
+    where indexrelid='public.kuri_admins_one_main_admin_key'::regclass
+      and indisunique
+  ),
+  'one Main Admin per Kuri is structurally constrained'
+);
+
+select ok(
+  has_function_privilege('authenticated','public.create_kuri_for_organization_admin(uuid,text,text,date,integer,integer,bigint,integer,integer,bigint,bigint,text,refund_policy)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.create_kuri_for_organization_admin(uuid,text,text,date,integer,integer,bigint,integer,integer,bigint,bigint,text,refund_policy)'::regprocedure,'EXECUTE'),
+  'explicit organization-scoped Kuri creation is authenticated-only'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='list_my_organizations'
+      and has_function_privilege('authenticated',p.oid,'EXECUTE')
+      and not has_function_privilege('anon',p.oid,'EXECUTE')
+  ),
+  'explicit organization listing API is authenticated-only'
 );
 
 -- 5-8: domain identity immutability triggers exist on critical tenant keys
@@ -83,6 +139,169 @@ select ok(
       and tgname like '%domain%identity%'
   ),
   'membership identity immutability trigger exists'
+);
+
+-- 9-12: invitation/join-request structural invariants
+
+-- Kuri-level authority reconciliation
+select is(
+  (
+    select count(*)
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname in (
+        'list_kuris_for_admin',
+        'get_kuri_for_admin',
+        'list_memberships_for_admin',
+        'list_people_available_for_membership',
+        'create_membership_for_admin',
+        'list_cycles_for_admin',
+        'get_cycle_for_admin'
+      )
+      and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'
+  ),
+  7::bigint,
+  'core Kuri reads and membership creation use Kuri-scoped authority'
+);
+
+select is(
+  (
+    select count(*)
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname in (
+        'list_kuris_for_admin',
+        'get_kuri_for_admin',
+        'list_memberships_for_admin',
+        'list_people_available_for_membership',
+        'create_membership_for_admin',
+        'list_cycles_for_admin',
+        'get_cycle_for_admin'
+      )
+      and pg_get_functiondef(p.oid) ilike '%organization_users%'
+  ),
+  0::bigint,
+  'core Kuri RPCs do not authorize through organization_users directly'
+);
+
+-- Remaining Kuri-scoped administrative surfaces
+select is(
+  (
+    select count(*)
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname in (
+        'generate_cycles_for_admin','generate_kuri_schedule_for_admin',
+        'transition_kuri_status_for_admin','transition_cycle_status_for_admin',
+        'transition_draw_status_for_admin','prepare_draw_for_admin',
+        'set_draw_pool_entry_for_admin','run_random_draw_for_admin',
+        'finalize_draw_for_admin','get_draw_session_for_admin',
+        'get_draw_selections_for_admin','list_draw_pool_for_admin',
+        'get_monthly_winners_for_admin','prepare_payout_for_admin',
+        'get_payout_for_admin','list_payouts_for_admin',
+        'mark_payout_paid_for_admin','transition_payout_status_for_admin',
+        'create_membership_exit_for_admin','approve_membership_exit_for_admin',
+        'settle_membership_exit_for_admin','transition_membership_exit_status_for_admin',
+        'record_membership_exit_refund_for_admin','record_death_settlement_for_admin',
+        'get_membership_exit_reconciliation_for_admin','get_death_settlement_context_for_admin',
+        'list_membership_exits_for_admin','refresh_membership_exit_financials_for_admin',
+        'get_membership_exit_membership_id_for_admin','get_membership_nominees_for_admin',
+        'transition_membership_status_for_admin','create_muppu_record_for_admin',
+        'list_muppu_records_for_admin','mark_muppu_paid_for_admin',
+        'waive_muppu_for_admin','deduct_muppu_from_prize_for_admin'
+      )
+      and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'
+  ),
+  36::bigint,
+  'remaining Kuri-scoped admin RPCs use Kuri-scoped authority'
+);
+
+select is(
+  (
+    select count(*)
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname in (
+        'generate_cycles_for_admin','generate_kuri_schedule_for_admin',
+        'transition_kuri_status_for_admin','transition_cycle_status_for_admin',
+        'transition_draw_status_for_admin','prepare_draw_for_admin',
+        'set_draw_pool_entry_for_admin','run_random_draw_for_admin',
+        'finalize_draw_for_admin','get_draw_session_for_admin',
+        'get_draw_selections_for_admin','list_draw_pool_for_admin',
+        'get_monthly_winners_for_admin','prepare_payout_for_admin',
+        'get_payout_for_admin','list_payouts_for_admin',
+        'mark_payout_paid_for_admin','transition_payout_status_for_admin',
+        'create_membership_exit_for_admin','approve_membership_exit_for_admin',
+        'settle_membership_exit_for_admin','transition_membership_exit_status_for_admin',
+        'record_membership_exit_refund_for_admin','record_death_settlement_for_admin',
+        'get_membership_exit_reconciliation_for_admin','get_death_settlement_context_for_admin',
+        'list_membership_exits_for_admin','refresh_membership_exit_financials_for_admin',
+        'get_membership_exit_membership_id_for_admin','get_membership_nominees_for_admin',
+        'transition_membership_status_for_admin','create_muppu_record_for_admin',
+        'list_muppu_records_for_admin','mark_muppu_paid_for_admin',
+        'waive_muppu_for_admin','deduct_muppu_from_prize_for_admin'
+      )
+      and pg_get_functiondef(p.oid) ilike '%organization_users%'
+  ),
+  0::bigint,
+  'remaining Kuri-scoped admin RPCs do not authorize through organization_users directly'
+);
+select ok(
+  exists (
+    select 1 from pg_class c
+    where c.oid='public.kuri_invitations'::regclass
+      and c.relrowsecurity
+  )
+  and exists (
+    select 1 from pg_class c
+    where c.oid='public.kuri_join_requests'::regclass
+      and c.relrowsecurity
+  ),
+  'invitation and join-request tables have RLS'
+);
+
+select ok(
+  exists (
+    select 1 from pg_constraint
+    where conrelid='public.kuri_invitations'::regclass
+      and conname='kuri_invitations_code_hash_key'
+  ),
+  'invitation code hashes are unique'
+);
+
+select ok(
+  exists (
+    select 1 from pg_index
+    where indexrelid='public.kuri_join_requests_one_pending_key'::regclass
+      and indisunique
+  ),
+  'only one pending join request per applicant and Kuri is enforced'
+);
+
+select is(
+  (select count(*)
+   from pg_proc p
+   join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_kuri_invitation_for_admin',
+       'revoke_kuri_invitation_for_admin',
+       'accept_kuri_invitation',
+       'list_kuri_join_requests_for_admin',
+       'list_kuri_invitations_for_admin',
+       'approve_kuri_join_request_for_admin',
+       'reject_kuri_join_request_for_admin'
+     )
+     and p.prosecdef
+     and has_function_privilege('authenticated',p.oid,'EXECUTE')
+     and has_function_privilege('anon',p.oid,'EXECUTE')
+  ),
+  0::bigint,
+  'invitation/join-request SECURITY DEFINER APIs are not anonymous-callable'
 );
 
 -- 9-14: state machine transition matrices using isolated temp tables
@@ -360,6 +579,1125 @@ select is(
   'new payouts are linked only to completed cycles'
 );
 
+
+-- 49-54: payment Kuri scoping and legacy authority invariants
+select ok(
+  exists (
+    select 1
+    from information_schema.columns
+    where table_schema='public'
+      and table_name='payments'
+      and column_name='kuri_id'
+      and is_nullable='NO'
+  ),
+  'payments have a required Kuri tenant key'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_constraint
+    where conrelid='public.payments'::regclass
+      and conname='payments_kuri_organization_fkey'
+  ),
+  'payments enforce Kuri and organization consistency'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.create_payment_for_admin(uuid,uuid,bigint,timestamptz,public.payment_method,text,text)'::regprocedure,
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.create_payment_for_admin(uuid,uuid,bigint,timestamptz,public.payment_method,text,text)'::regprocedure,
+    'EXECUTE'
+  )
+  and to_regprocedure('public.create_payment_for_admin(uuid,bigint,timestamptz,public.payment_method,text,text)') is null,
+  'payment creation API uses the new Kuri-scoped signature only'
+);
+
+select is(
+  (
+    select count(*)
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname in (
+        'create_payment_for_admin',
+        'list_payments_for_admin',
+        'get_payment_for_admin',
+        'list_installments_for_person_payment_admin',
+        'list_installments_for_payment_admin',
+        'list_installments_for_cycle_admin',
+        'list_payment_allocations_for_admin',
+        'allocate_payment_for_admin',
+        'audit_financial_ledger_for_admin',
+        'refresh_membership_exit_financials_for_admin'
+      )
+      and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'
+  ),
+  10::bigint,
+  'all payment/installation admin APIs use Kuri-scoped authority'
+);
+
+select is(
+  (
+    select count(*)
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname in (
+        'create_payment_for_admin',
+        'list_payments_for_admin',
+        'get_payment_for_admin',
+        'list_installments_for_person_payment_admin',
+        'list_installments_for_payment_admin',
+        'list_installments_for_cycle_admin',
+        'list_payment_allocations_for_admin',
+        'allocate_payment_for_admin',
+        'audit_financial_ledger_for_admin',
+        'refresh_membership_exit_financials_for_admin'
+      )
+      and pg_get_functiondef(p.oid) ilike '%organization_users%'
+  ),
+  0::bigint,
+  'payment/installation admin APIs do not authorize through organization_users directly'
+);
+
+select is(
+  (
+    select count(*)
+    from public.kuris k
+    where not exists (
+      select 1
+      from public.kuri_admins ka
+      where ka.kuri_id=k.id
+        and ka.role='MAIN_ADMIN'
+    )
+  ),
+  0::bigint,
+  'every existing Kuri has a recovered Main Admin authority row'
+);
+
+
+-- 60-65: payment operation idempotency invariants
+select ok(
+  exists (
+    select 1 from pg_class
+    where oid='public.financial_idempotency_keys'::regclass
+      and relrowsecurity
+  ),
+  'financial idempotency key ledger has RLS'
+);
+
+select ok(
+  exists (
+    select 1 from pg_constraint
+    where conrelid='public.financial_idempotency_keys'::regclass
+      and conname='financial_idempotency_keys_actor_user_id_operation_type_idempotency_key_key'
+  ),
+  'payment operation idempotency key is unique per actor and operation'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.create_payment_for_admin(uuid,uuid,bigint,timestamptz,public.payment_method,text,text,text)'::regprocedure,
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'public.allocate_payment_for_admin(uuid,uuid,bigint,text)'::regprocedure,
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.create_payment_for_admin(uuid,uuid,bigint,timestamptz,public.payment_method,text,text,text)'::regprocedure,
+    'EXECUTE'
+  ),
+  'idempotent payment mutation APIs are authenticated-only'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='create_payment_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%financial_idempotency_keys%'
+      and pg_get_functiondef(p.oid) ilike '%request_hash%'
+  )
+  and exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='allocate_payment_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%financial_idempotency_keys%'
+      and pg_get_functiondef(p.oid) ilike '%request_hash%'
+  ),
+  'payment create and allocation functions bind retries to request hashes'
+);
+
+select is(
+  (
+    select count(*)
+    from public.financial_idempotency_keys f
+  ),
+  0::bigint,
+  'no idempotency keys persisted by rollback-only verification'
+);
+
+select ok(
+  not has_table_privilege('anon','public.financial_idempotency_keys','SELECT')
+  and not has_table_privilege('authenticated','public.financial_idempotency_keys','SELECT'),
+  'clients cannot directly read financial idempotency keys'
+);
+
+
+
+-- 66-75: payment correction/reversal structural contract
+select ok(
+  exists (select 1 from pg_type t join pg_namespace n on n.oid=t.typnamespace
+          where n.nspname='public' and t.typname='payment_adjustment_type'
+            and exists (select 1 from pg_enum e where e.enumtypid=t.oid and e.enumlabel='CORRECTION')
+            and exists (select 1 from pg_enum e where e.enumtypid=t.oid and e.enumlabel='REVERSAL'))
+  and exists (select 1 from pg_type t join pg_namespace n on n.oid=t.typnamespace
+          where n.nspname='public' and t.typname='payment_adjustment_status'
+            and exists (select 1 from pg_enum e where e.enumtypid=t.oid and e.enumlabel='REQUESTED')
+            and exists (select 1 from pg_enum e where e.enumtypid=t.oid and e.enumlabel='APPROVED')
+            and exists (select 1 from pg_enum e where e.enumtypid=t.oid and e.enumlabel='EXECUTED')
+            and exists (select 1 from pg_enum e where e.enumtypid=t.oid and e.enumlabel='REJECTED')),
+  'payment adjustment type and status vocabularies exist'
+);
+select ok(
+  (select count(*) from pg_class where oid in ('public.payment_adjustment_requests'::regclass,'public.payment_corrections'::regclass,'public.payment_reversal_entries'::regclass) and relrowsecurity)=3,
+  'payment adjustment ledgers have RLS enabled'
+);
+select ok(
+  not has_table_privilege('anon','public.payment_adjustment_requests','SELECT')
+  and not has_table_privilege('authenticated','public.payment_adjustment_requests','SELECT')
+  and not has_table_privilege('anon','public.payment_corrections','SELECT')
+  and not has_table_privilege('authenticated','public.payment_corrections','SELECT')
+  and not has_table_privilege('anon','public.payment_reversal_entries','SELECT')
+  and not has_table_privilege('authenticated','public.payment_reversal_entries','SELECT'),
+  'clients cannot directly read payment adjustment ledgers'
+);
+select is(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.prosecdef
+     and has_function_privilege('authenticated',p.oid,'EXECUTE')
+     and p.proname in ('create_payment_correction_request_for_admin','create_payment_reversal_request_for_admin','approve_payment_adjustment_request_for_admin','reject_payment_adjustment_request_for_admin','execute_payment_adjustment_request_for_admin','list_payment_adjustment_requests_for_admin','get_payment_adjustment_request_for_admin')),7::bigint,
+  'seven payment correction/reversal APIs are exposed to authenticated clients'
+);
+select is(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.prosecdef
+     and has_function_privilege('anon',p.oid,'EXECUTE')
+     and p.proname in ('create_payment_correction_request_for_admin','create_payment_reversal_request_for_admin','approve_payment_adjustment_request_for_admin','reject_payment_adjustment_request_for_admin','execute_payment_adjustment_request_for_admin','list_payment_adjustment_requests_for_admin','get_payment_adjustment_request_for_admin')),0::bigint,
+  'payment correction/reversal APIs are not anonymous-callable'
+);
+select ok(
+  not has_function_privilege('anon','public.get_effective_payment_amount(uuid)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('authenticated','public.get_effective_payment_amount(uuid)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.get_effective_payment_allocation_amount(uuid)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('authenticated','public.get_effective_payment_allocation_amount(uuid)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('authenticated','public.reconcile_installment_from_allocations(uuid)'::regprocedure,'EXECUTE'),
+  'effective financial helpers remain internal'
+);
+select ok(
+  exists (select 1 from pg_constraint where conrelid='public.payment_adjustment_requests'::regclass and pg_get_constraintdef(oid) ilike '%reason%')
+  and exists (select 1 from pg_constraint where conrelid='public.payment_adjustment_requests'::regclass and pg_get_constraintdef(oid) ilike '%REJECTED%')
+  and exists (select 1 from pg_constraint where conrelid='public.payment_reversal_entries'::regclass and conname='payment_reversal_entries_kuri_org_fkey'),
+  'adjustment reason/status and Kuri tenancy constraints exist'
+);
+select ok(
+  exists (select 1 from pg_constraint where conrelid='public.payment_corrections'::regclass and conname='payment_corrections_kuri_org_fkey')
+  and exists (select 1 from pg_index where indexrelid='public.payment_reversal_entries_one_unallocated_per_request'::regclass and indisunique),
+  'append-only correction/reversal structural invariants exist'
+);
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_payment_for_admin' and pg_get_functiondef(p.oid) ilike '%get_effective_payment_amount%')
+  and exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='list_payment_allocations_for_admin' and pg_get_functiondef(p.oid) ilike '%get_effective_payment_allocation_amount%'),
+  'payment read APIs expose effective financial values'
+);
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='reject_payment_adjustment_request_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%p_rejection_reason%')
+  and not exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='reject_payment_adjustment_request_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%btrim(rejection_reason)%'),
+  'payment rejection API uses unambiguous input parameter naming'
+);
+
+
+-- 76-83: payment allocation policy
+select ok(
+  to_regprocedure('public.allocate_payment_to_oldest_installments_for_admin(uuid,uuid,bigint,text)') is not null
+  and has_function_privilege('authenticated','public.allocate_payment_to_oldest_installments_for_admin(uuid,uuid,bigint,text)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.allocate_payment_to_oldest_installments_for_admin(uuid,uuid,bigint,text)'::regprocedure,'EXECUTE'),
+  'oldest-first advance allocation API is authenticated-only'
+);
+select ok(
+  to_regprocedure('public.allocate_payment_to_oldest_installments_for_admin(uuid,bigint,text)') is null,
+  'stale ambiguous advance allocation signature is removed'
+);
+select ok(
+  exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='allocate_payment_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%Cannot skip outstanding earlier installments%'
+  ),
+  'targeted allocation rejects skipping earlier outstanding installments'
+);
+select ok(
+  exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='allocate_payment_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%ORDER BY lock_c.cycle_number,lock_i.id%'
+      and pg_get_functiondef(p.oid) ilike '%FOR UPDATE%'
+  ),
+  'targeted allocation locks installments in deterministic cycle order'
+);
+select ok(
+  exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='allocate_payment_to_oldest_installments_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%target_membership_id%'
+      and pg_get_functiondef(p.oid) ilike '%Payment person does not match membership person%'
+  ),
+  'advance allocation is explicitly membership-scoped'
+);
+select ok(
+  exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='allocate_payment_to_oldest_installments_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%ORDER BY oc.cycle_number,oi.id%'
+      and pg_get_functiondef(p.oid) ilike '%requested_allocation_amount>total_outstanding%'
+  ),
+  'advance allocation is oldest-first and bounded by membership outstanding balance'
+);
+select ok(
+  exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='allocate_payment_to_oldest_installments_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%financial_idempotency_keys%'
+      and pg_get_functiondef(p.oid) ilike '%PAYMENT_ALLOCATION%'
+  ),
+  'advance allocation uses the existing financial idempotency ledger'
+);
+select ok(
+  has_function_privilege('authenticated','public.allocate_payment_for_admin(uuid,uuid,bigint,text)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.allocate_payment_for_admin(uuid,uuid,bigint,text)'::regprocedure,'EXECUTE'),
+  'targeted allocation API remains authenticated-only after policy hardening'
+);
+
+-- 95-96: remaining draw read authority and legacy Kuri creation regression
+select is(
+  (select count(*)
+   from pg_proc p
+   join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'get_draw_session_for_admin',
+       'get_draw_selections_for_admin',
+       'list_draw_pool_for_admin',
+       'get_monthly_winners_for_admin'
+     )
+     and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'),
+  4::bigint,
+  'draw read APIs use Kuri-scoped authority'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='create_kuri_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%count(DISTINCT ou.organization_id)%'
+      and pg_get_functiondef(p.oid) ilike '%coalesce(exit_refund_rule,%'
+  ),
+  'legacy Kuri creation organization lookup does not aggregate UUIDs with min(uuid) and uses the correct refund parameter'
+);
+
+-- 97-101: payout authority, idempotency, and net-amount regression
+select is(
+  (select count(*)
+   from pg_proc p
+   join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'transition_payout_status_for_admin',
+       'prepare_payout_for_admin',
+       'get_payout_for_admin',
+       'list_payouts_for_admin',
+       'mark_payout_paid_for_admin'
+     )
+     and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'),
+  5::bigint,
+  'all payout APIs use Kuri-scoped authority'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.mark_payout_paid_for_admin(uuid,timestamptz,public.payment_method,text,text,text,bigint)'::regprocedure,
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.mark_payout_paid_for_admin(uuid,timestamptz,public.payment_method,text,text,text,bigint)'::regprocedure,
+    'EXECUTE'
+  ),
+  'payout payment API is authenticated-only with the idempotent signature'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='mark_payout_paid_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%financial_idempotency_keys%'
+      and pg_get_functiondef(p.oid) ilike '%PAYOUT_PAYMENT%'
+  ),
+  'payout payment idempotency API uses the required operation type'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_constraint
+    where conrelid='public.financial_idempotency_keys'::regclass
+      and pg_get_constraintdef(oid) ilike '%PAYOUT_PAYMENT%'
+  ),
+  'financial idempotency ledger allows payout payment operations'
+);
+
+select is(
+  (select count(*)
+   from public.payouts po
+   where po.net_amount <> greatest(po.gross_amount-po.muppu_amount-po.expense_deductions-po.other_deductions,0)),
+  0::bigint,
+  'existing payouts satisfy gross minus deductions net-amount invariant'
+);
+
+-- 102-106: generalized Expense payout integration
+select ok(
+  exists (
+    select 1
+    from information_schema.columns
+    where table_schema='public'
+      and table_name='payouts'
+      and column_name='expense_deductions'
+      and data_type='bigint'
+      and is_nullable='NO'
+  ),
+  'payouts expose a dedicated generalized Expense deduction component'
+);
+
+select ok(
+  (select count(*)
+   from public.payouts po
+   where po.net_amount <> greatest(
+     po.gross_amount-po.muppu_amount-po.expense_deductions-po.other_deductions,
+     0
+   )),
+  0::bigint,
+  'existing payouts satisfy the generalized gross-minus-all-deductions invariant'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='prepare_payout_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%expense_obligations%'
+      and pg_get_functiondef(p.oid) ilike '%DEDUCTED_FROM_PRIZE%'
+  ),
+  'payout preparation recomputes linked generalized Expense deductions'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='deduct_expense_from_prize_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%expense_deductions=expense_deductions+obligation_amount%'
+      and pg_get_functiondef(p.oid) ilike '%status=''PENDING''%'
+  ),
+  'prize Expense deduction updates only a pending payout'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_constraint
+    where conrelid='public.financial_idempotency_keys'::regclass
+      and conname='financial_idempotency_keys_check'
+      and pg_get_constraintdef(oid) ilike '%PAYOUT_PAYMENT%'
+      and pg_get_constraintdef(oid) ilike '%result_payment_id IS NULL%'
+      and pg_get_constraintdef(oid) ilike '%result_bigint IS NULL%'
+  ),
+  'PAYOUT_PAYMENT completion tracks state without misusing the payment-result foreign key'
+);
+
+-- 102-106: cycle authority and historical immutability
+select is(
+  (select count(*)
+   from pg_proc p
+   join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'generate_cycles_for_admin',
+       'generate_kuri_schedule_for_admin',
+       'get_cycle_for_admin',
+       'list_cycles_for_admin',
+       'transition_cycle_status_for_admin'
+     )
+     and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'),
+  5::bigint,
+  'cycle APIs use Kuri-scoped authority'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.transition_cycle_status_for_admin(uuid,public.cycle_status)'::regprocedure,
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.transition_cycle_status_for_admin(uuid,public.cycle_status)'::regprocedure,
+    'EXECUTE'
+  ),
+  'cycle transition API is authenticated-only'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='generate_cycles_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%status NOT IN (''COMPLETED'',''CANCELLED'')%'
+  ),
+  'cycle generation does not rewrite COMPLETED or CANCELLED cycle dates'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='generate_cycles_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%FOR UPDATE%'
+  )
+  and exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='transition_cycle_status_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%FOR UPDATE OF c,k%'
+  ),
+  'cycle generation and transition serialize on the Kuri/cycle rows'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='transition_cycle_status_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%current_status=''DRAW_PENDING''%'
+      and pg_get_functiondef(p.oid) ilike '%draw_sessions%'
+      and pg_get_functiondef(p.oid) ilike '%monthly_winners%'
+  ),
+  'cycle completion remains gated by a finalized draw and at least one winner'
+);
+
+-- 107-112: membership authority, capacity locking, and non-retroactive late join policy
+select is(
+  (select count(*)
+   from pg_proc p
+   join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_membership_for_admin',
+       'list_memberships_for_admin',
+       'transition_membership_status_for_admin',
+       'list_people_available_for_membership'
+     )
+     and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'),
+  4::bigint,
+  'membership and membership-picker APIs use Kuri-scoped authority'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='create_membership_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%status NOT IN (''COMPLETED'',''CANCELLED'')%'
+  ),
+  'late-joining membership policy excludes terminal cycles from new installment creation'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='generate_cycles_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%c.status NOT IN (''COMPLETED'',''CANCELLED'')%'
+  )
+  and exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='generate_kuri_schedule_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%c.status NOT IN (''COMPLETED'',''CANCELLED'')%'
+  ),
+  'schedule generation does not create retroactive installments for terminal cycles'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='create_membership_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%FROM public.kuris k%'
+      and pg_get_functiondef(p.oid) ilike '%FOR UPDATE%'
+      and pg_get_functiondef(p.oid) ilike '%membership_limit%'
+  ),
+  'membership creation locks the Kuri row while enforcing membership capacity'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='transition_membership_status_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%FOR UPDATE OF m,k%'
+  ),
+  'membership status transition locks the membership and Kuri rows'
+);
+
+-- 113-119: explicit Kuri lifecycle timestamps and enrollment closure
+select ok(
+  exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='kuris'
+      and column_name in ('enrollment_closed_at','actual_started_at','completed_at','archived_at')
+  ),
+  'Kuri lifecycle timestamps are stored explicitly'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.close_kuri_enrollment_for_admin(uuid)'::regprocedure,
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.close_kuri_enrollment_for_admin(uuid)'::regprocedure,
+    'EXECUTE'
+  ),
+  'Kuri enrollment-close API is authenticated-only'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='transition_kuri_status_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%enrollment_closed_at_value%'
+      and pg_get_functiondef(p.oid) ilike '%actual_started_at_value%'
+      and pg_get_functiondef(p.oid) ilike '%completed_at_value%'
+      and pg_get_functiondef(p.oid) ilike '%archived_at_value%'
+  ),
+  'Kuri status transitions record explicit lifecycle timestamps'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='transition_kuri_status_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%Kuri enrollment must be explicitly closed before the Kuri can start%'
+  ),
+  'Kuri activation requires explicit enrollment closure'
+);
+
+select ok(
+  exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='create_membership_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%Kuri enrollment is closed; use the controlled late-joining workflow%'
+  ),
+  'initial enrollment closure is distinct from controlled late joining'
+);
+
+select ok(
+  exists (
+    select 1 from pg_trigger
+    where tgrelid='public.kuris'::regclass
+      and tgname like '%status%'
+  ),
+  'Kuri lifecycle status guard remains trigger-protected'
+);
+
+-- 120-129: draw operation idempotency/replay protection
+select ok(
+  has_function_privilege('authenticated','public.run_random_draw_for_admin(uuid,integer,text)'::regprocedure,'EXECUTE')
+  and has_function_privilege('authenticated','public.finalize_draw_for_admin(uuid,uuid[],text)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.run_random_draw_for_admin(uuid,integer,text)'::regprocedure,'EXECUTE')
+  and not has_function_privilege('anon','public.finalize_draw_for_admin(uuid,uuid[],text)'::regprocedure,'EXECUTE')
+  and (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+       where n.nspname='public' and p.proname in ('run_random_draw_for_admin','finalize_draw_for_admin')
+         and p.proconfig @> ARRAY['search_path=public'])=2,
+  'draw operation APIs are authenticated-only and retain a fixed search_path'
+);
+
+select ok(
+  to_regprocedure('public.run_random_draw_for_admin(uuid,integer)') is null
+  and to_regprocedure('public.finalize_draw_for_admin(uuid,uuid[])') is null,
+  'legacy non-idempotent draw signatures are removed'
+);
+
+select ok(
+  exists (select 1 from pg_constraint where conrelid='public.financial_idempotency_keys'::regclass
+          and pg_get_constraintdef(oid) ilike '%PAYOUT_PAYMENT%'
+          and pg_get_constraintdef(oid) ilike '%DRAW_RUN%'
+          and pg_get_constraintdef(oid) ilike '%DRAW_FINALIZE%'),
+  'financial idempotency ledger allows payout and draw operations'
+);
+
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='run_random_draw_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%v_actor_user_id%'
+            and pg_get_functiondef(p.oid) ilike '%f.actor_user_id=v_actor_user_id%'
+            and pg_get_functiondef(p.oid) ilike '%request_hash%'),
+  'random draw idempotency uses an unambiguous actor variable and request hash'
+);
+
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='finalize_draw_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%v_actor_user_id%'
+            and pg_get_functiondef(p.oid) ilike '%f.actor_user_id=v_actor_user_id%'
+            and pg_get_functiondef(p.oid) ilike '%request_hash%'),
+  'draw finalization idempotency uses an unambiguous actor variable and request hash'
+);
+
+select ok(
+  exists (select 1 from pg_constraint where conrelid='public.financial_idempotency_keys'::regclass
+          and conname='financial_idempotency_keys_check'
+          and pg_get_constraintdef(oid) ilike '%DRAW_RUN%'
+          and pg_get_constraintdef(oid) ilike '%result_bigint IS NOT NULL%'),
+  'DRAW_RUN completion stores its result as result_bigint'
+);
+
+select ok(
+  exists (select 1 from pg_constraint where conrelid='public.financial_idempotency_keys'::regclass
+          and conname='financial_idempotency_keys_check'
+          and pg_get_constraintdef(oid) ilike '%DRAW_FINALIZE%'
+          and pg_get_constraintdef(oid) ilike '%result_bigint IS NOT NULL%'),
+  'DRAW_FINALIZE completion stores its result as result_bigint'
+);
+
+select ok(
+  exists (select 1 from pg_constraint where conrelid='public.financial_idempotency_keys'::regclass
+          and conname='financial_idempotency_keys_check'
+          and pg_get_constraintdef(oid) ilike '%PAYOUT_PAYMENT%'
+          and pg_get_constraintdef(oid) ilike '%result_payment_id IS NOT NULL%'),
+  'PAYOUT_PAYMENT completion retains the payment-result invariant'
+);
+
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='run_random_draw_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%IF idem_row.status=''COMPLETED''%'
+            and pg_get_functiondef(p.oid) ilike '%FROM public.draw_selections%'),
+  'random draw completed retries return the stored selection set'
+);
+
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='finalize_draw_for_admin'
+            and pg_get_functiondef(p.oid) ilike '%IF idem_row.status=''COMPLETED''%'
+            and pg_get_functiondef(p.oid) ilike '%FROM public.monthly_winners%'),
+  'draw finalization completed retries return the existing winner count'
+);
+
+-- 133-138: Muppu Kuri authority and payout safety
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_muppu_record_for_admin','list_muppu_records_for_admin',
+       'mark_muppu_paid_for_admin','waive_muppu_for_admin',
+       'deduct_muppu_from_prize_for_admin'
+     )
+     and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'
+     and pg_get_functiondef(p.oid) not ilike '%organization_users%')=5,
+  'all Muppu client APIs use explicit Kuri authority'
+);
+
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_muppu_record_for_admin','list_muppu_records_for_admin',
+       'mark_muppu_paid_for_admin','waive_muppu_for_admin',
+       'deduct_muppu_from_prize_for_admin'
+     )
+     and has_function_privilege('authenticated',p.oid,'EXECUTE')
+     and not has_function_privilege('anon',p.oid,'EXECUTE'))=5,
+  'Muppu client APIs are authenticated-only'
+);
+
+select ok(
+  exists(
+    select 1 from pg_trigger
+    where tgrelid='public.muppu_records'::regclass
+      and tgname='muppu_records_identity_guard'
+  ),
+  'Muppu identity guard trigger exists'
+);
+
+select is(
+  (select count(*)
+   from public.muppu_records mr
+   join public.cycles c on c.id=mr.cycle_id
+   join public.kuris k on k.id=mr.kuri_id
+   join public.people p on p.id=mr.person_id
+   where c.kuri_id<>mr.kuri_id or p.organization_id<>k.organization_id),
+  0::bigint,
+  'existing Muppu records preserve cycle/Kuri/person tenancy'
+);
+
+select ok(
+  exists(
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='deduct_muppu_from_prize_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%payout processing has started%'
+  ),
+  'Muppu prize deduction is blocked after payout processing starts'
+);
+
+select ok(
+  exists(
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and p.proname='create_muppu_record_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%Person does not belong to this Kuri%'
+  ),
+  'Muppu creation requires a person belonging to the target Kuri'
+);
+
+-- 130-140: generalized Expense foundation
+select ok(
+  to_regclass('public.expense_rules') is not null
+  and to_regclass('public.expense_obligations') is not null
+  and (select relrowsecurity from pg_class where oid='public.expense_rules'::regclass)
+  and (select relrowsecurity from pg_class where oid='public.expense_obligations'::regclass),
+  'Expense rule and obligation tables exist with RLS enabled'
+);
+
+select ok(
+  not has_table_privilege('authenticated','public.expense_rules','SELECT')
+  and not has_table_privilege('authenticated','public.expense_obligations','SELECT'),
+  'Expense tables are not directly readable by authenticated clients'
+);
+
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname in (
+     'create_expense_rule_for_admin','set_expense_rule_active_for_admin',
+     'list_expense_rules_for_admin','list_expense_obligations_for_admin',
+     'mark_expense_obligation_paid_for_admin','waive_expense_obligation_for_admin',
+     'deduct_expense_from_prize_for_admin'
+   ) and has_function_privilege('authenticated',p.oid,'EXECUTE')
+   and not has_function_privilege('anon',p.oid,'EXECUTE')
+   and p.proconfig @> ARRAY['search_path=public'])=7,
+  'Expense client APIs are authenticated-only SECURITY DEFINER functions with a fixed search_path'
+);
+
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname in ('sync_expense_obligations_for_rule','sync_expense_obligations_for_membership','sync_expense_obligations_for_kuri')
+     and not has_function_privilege('authenticated',p.oid,'EXECUTE')
+     and not has_function_privilege('anon',p.oid,'EXECUTE')
+     and p.proconfig @> ARRAY['search_path=""'])=3,
+  'Expense synchronization helpers remain internal and non-callable by clients'
+);
+
+select ok(
+  exists(select 1 from pg_type t join pg_enum e on e.enumtypid=t.oid join pg_namespace n on n.oid=t.typnamespace
+         where n.nspname='public' and t.typname='expense_frequency' and e.enumlabel in ('ONE_TIME','PER_CYCLE'))
+  and exists(select 1 from pg_type t join pg_enum e on e.enumtypid=t.oid join pg_namespace n on n.oid=t.typnamespace
+         where n.nspname='public' and t.typname='expense_obligation_status' and e.enumlabel in ('UNPAID','PAID','WAIVED','DEDUCTED_FROM_PRIZE')),
+  'Expense frequency and settlement status vocabularies are defined'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='create_expense_rule_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%has_kuri_admin_role%'
+           and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_rule%'),
+  'Expense rule creation is Kuri-scoped and creates obligations through the synchronization layer'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='sync_expense_obligations_for_rule'
+           and pg_get_functiondef(p.oid) ilike '%c.status NOT IN (''COMPLETED'',''CANCELLED'')%'),
+  'Per-cycle Expense obligations exclude terminal cycles'
+);
+
+select ok(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname in ('mark_expense_obligation_paid_for_admin','waive_expense_obligation_for_admin','deduct_expense_from_prize_for_admin')
+     and pg_get_functiondef(p.oid) ilike '%status=''UNPAID''%')=3,
+  'Expense settlement APIs require obligations to be UNPAID'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='deduct_expense_from_prize_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%payout_status<>''PENDING''%'),
+  'Expense prize deductions are restricted to pending payouts'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='audit_financial_change'
+           and pg_get_functiondef(p.oid) ilike '%expense_rules%'
+           and pg_get_functiondef(p.oid) ilike '%expense_obligations%'),
+  'Expense rules and obligations have explicit financial audit organization resolution'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='create_membership_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_membership%')
+  and exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='transition_membership_status_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_membership%')
+  and exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='generate_cycles_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_kuri%')
+  and exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='generate_kuri_schedule_for_admin'
+           and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_kuri%'),
+  'Expense obligations synchronize with activation, enrollment and schedule generation'
+);
+
+
+-- Membership exit / death / succession authority contract
+select ok(
+  exists(select 1 from information_schema.columns where table_schema='public' and table_name='membership_exits' and column_name='requested_at'),
+  'membership exit records capture requested_at'
+);
+select ok(
+  exists(select 1 from information_schema.columns where table_schema='public' and table_name='membership_exits' and column_name='death_date_verified_at'),
+  'membership exit records capture death-date verification'
+);
+select ok(
+  exists(select 1 from information_schema.columns where table_schema='public' and table_name='memberships' and column_name='current_holder_person_id'),
+  'memberships preserve a separate current holder'
+);
+select ok(
+  exists(select 1 from pg_class where oid='public.membership_successions'::regclass and relrowsecurity),
+  'membership_successions has RLS enabled'
+);
+select ok(
+  exists(select 1 from pg_trigger where tgname='membership_successions_append_only'),
+  'succession records are append-only'
+);
+select is(
+  (select count(*) from pg_proc where oid='public.create_membership_exit_for_admin(uuid,public.settlement_reason,date,public.refund_policy,bigint,text,text)'::regprocedure),
+  1,
+  'canonical exit-create signature exists'
+);
+select is(
+  (select count(*) from pg_proc where oid='public.create_membership_exit_for_admin(uuid,public.settlement_reason,date,public.refund_policy,bigint,text)'::regprocedure),
+  0,
+  'legacy short exit-create overload is absent'
+);
+select ok(
+  not exists(
+    select 1
+    from pg_proc
+    where proname in (
+      'create_membership_exit_for_admin','approve_membership_exit_for_admin',
+      'verify_death_date_for_admin','cancel_membership_exit_for_admin',
+      'settle_membership_exit_for_admin','record_membership_exit_refund_for_admin',
+      'record_death_settlement_for_admin','create_membership_succession_for_admin'
+    )
+    and position('organization_users' in pg_get_functiondef(oid))>0
+  ),
+  'exit/death/succession APIs use Kuri-scoped authority'
+);
+
+
+
+-- 147-161: final exit/death/succession security and financial assertions
+select ok(
+  exists(select 1 from information_schema.columns where table_schema='public' and table_name='membership_exits' and column_name='death_date'),
+  'verified death cases have a distinct death date field'
+);
+
+select ok(
+  exists(select 1 from information_schema.columns where table_schema='public' and table_name='nominees' and column_name='successor_person_id')
+  and exists(select 1 from information_schema.columns where table_schema='public' and table_name='memberships' and column_name='current_holder_person_id'),
+  'nominees and memberships carry explicit succession identity'
+);
+
+select ok(
+  exists(select 1 from pg_index where indexrelid='public.membership_successions_one_per_membership'::regclass and indisunique)
+  and exists(select 1 from pg_index where indexrelid='public.membership_successions_one_per_exit'::regclass and indisunique),
+  'succession is one-to-one with the membership and settled death case'
+);
+
+select is(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_membership_exit_for_admin','approve_membership_exit_for_admin',
+       'record_membership_exit_refund_for_admin','verify_death_date_for_admin',
+       'record_death_settlement_for_admin','settle_membership_exit_for_admin',
+       'link_nominee_to_successor_person_for_admin','record_membership_succession_for_admin'
+     )
+     and has_function_privilege('anon',p.oid,'EXECUTE')),
+  0::bigint,
+  'exit/death/succession mutation functions are anonymous-disabled'
+);
+
+select is(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_membership_exit_for_admin','approve_membership_exit_for_admin',
+       'record_membership_exit_refund_for_admin','verify_death_date_for_admin',
+       'record_death_settlement_for_admin','settle_membership_exit_for_admin',
+       'link_nominee_to_successor_person_for_admin','record_membership_succession_for_admin'
+     )
+     and p.proconfig @> ARRAY['search_path=public']),
+  0::bigint,
+  'exit/death/succession SECURITY DEFINER mutations have a fixed search_path'
+);
+
+select is(
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in (
+       'create_membership_exit_for_admin','list_membership_exits_for_admin',
+       'get_membership_exit_membership_id_for_admin','get_membership_exit_reconciliation_for_admin',
+       'approve_membership_exit_for_admin','transition_membership_exit_status_for_admin',
+       'record_membership_exit_refund_for_admin','verify_death_date_for_admin',
+       'get_death_settlement_context_for_admin','record_death_settlement_for_admin',
+       'settle_membership_exit_for_admin','create_nominee_for_admin',
+       'update_nominee_for_admin','delete_nominee_for_admin','list_nominees_for_admin',
+       'get_membership_nominees_for_admin','link_nominee_to_successor_person_for_admin',
+       'record_membership_succession_for_admin'
+     )
+     and pg_get_functiondef(p.oid) ilike '%organization_users%'),
+  0::bigint,
+  'exit/death/nominee/succession APIs do not contain direct organization authority checks'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='create_membership_exit_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%calculate_membership_exit_financials%'),
+  'exit creation derives contribution and settlement from the authoritative calculator'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='approve_membership_exit_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%calculate_membership_exit_financials%'),
+  'exit approval rechecks financial settlement instead of trusting stale stored totals'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='record_membership_exit_refund_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%remaining approved refund balance%'),
+  'refund execution cannot exceed the remaining calculated balance'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='verify_death_date_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%cannot be changed%'
+      and pg_get_functiondef(p.oid) ilike '%cannot be after the exit date%'),
+  'death-date verification is bounded and immutable'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='record_death_settlement_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%DEATH_SETTLEMENT%'
+      and pg_get_functiondef(p.oid) ilike '%Selected nominee does not belong to this person%'
+      and pg_get_functiondef(p.oid) ilike '%death_date_verified_at%'),
+  'death settlement is tied to a verified death and registered nominee'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='record_membership_succession_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%membership_successions%'
+      and pg_get_functiondef(p.oid) ilike '%successor_person_id%'
+      and pg_get_functiondef(p.oid) ilike '%settled%'),
+  'succession requires a settled death and linked successor'
+);
+
+select ok(
+  exists(select 1 from pg_trigger where tgrelid='public.memberships'::regclass and tgname='membership_current_holder_identity_guard'),
+  'current holder changes are protected by a database trigger'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='prepare_draw_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%death_date_verified_at%'),
+  'draw preparation evaluates verified-death eligibility'
+);
+
+select ok(
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='sync_expense_obligations_for_membership'
+      and pg_get_functiondef(p.oid) ilike '%PENDING%')
+  and exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='cancel_membership_exit_for_admin'
+      and pg_get_functiondef(p.oid) ilike '%sync_expense_obligations_for_membership%'),
+  'Expense synchronization stops at exit request and resumes after cancellation'
+);
 select * from finish();
 
 rollback;

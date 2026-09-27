@@ -39,11 +39,14 @@ export async function markPayoutPaid(formData: FormData) {
   const winnerId = String(formData.get("winner_id") || "").trim();
   const paymentDate = String(formData.get("payment_date") || "").trim();
   const method = String(formData.get("method") || "").trim();
+  const idempotencyKey = String(formData.get("idempotency_key") || "").trim();
   const deductions = Number(formData.get("other_deductions") || 0);
 
   if (
     !winnerId ||
     !paymentDate ||
+    !idempotencyKey ||
+    idempotencyKey.length > 200 ||
     !["UPI", "BANK_TRANSFER", "CASH", "OTHER"].includes(method) ||
     !Number.isInteger(deductions) ||
     deductions < 0
@@ -68,6 +71,7 @@ export async function markPayoutPaid(formData: FormData) {
     target_winner_id: winnerId,
     payout_payment_date: parsedDate.toISOString(),
     payout_method: method,
+    p_idempotency_key: idempotencyKey,
     payout_reference:
       String(formData.get("reference") || "").trim() || null,
     payout_notes: String(formData.get("notes") || "").trim() || null,
