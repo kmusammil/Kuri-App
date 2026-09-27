@@ -287,7 +287,7 @@ begin
       if percentage_basis_points_value is null
          or percentage_basis_points_value<1
          or percentage_basis_points_value>10000 then
-        raise exception 'Percentage late fee must be between 0.01% and 100%.';
+        raise exception 'Percentage late fee must be between 0.01 percent and 100 percent.';
       end if;
       v_new_fixed:=null;
       v_new_pct:=percentage_basis_points_value;
