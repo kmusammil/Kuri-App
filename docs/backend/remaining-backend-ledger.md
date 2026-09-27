@@ -22,8 +22,8 @@ GitHub-only changes do not require a Supabase migration.
 
 ### Current remaining-work sequence
 
-1. Admin Position Request workflow — NEXT
-2. Kuri Announcement workflow — NEXT
+1. Admin Position Request workflow — COMPLETE
+2. Kuri Announcement workflow — COMPLETE
 3. Admin Security Event workflow — NEXT
 4. Membership capacity/resource ceiling — NEXT
 5. Remaining organization/authority work — DEFERRED
@@ -76,9 +76,41 @@ Verification completed:
 - approval role change and audit trail verified
 - smoke tests rolled back, leaving no test request/notification rows
 
-### 2. Kuri Announcement Workflow — NEXT
+### 2. Kuri Announcement Workflow — COMPLETE
 
-Create the announcement domain object/workflow: Kuri scope, author, title/body, draft/published/scheduled state, publication, edit, revoke/withdraw, audience, expiry/versioning, authorization and audit. Then connect KURI_ANNOUNCEMENT notification production.
+Implemented and live-verified as a Kuri-scoped administrative broadcast workflow.
+
+- Announcement is scoped to one Kuri and records its author.
+- Supported states: DRAFT → SCHEDULED → PUBLISHED → EXPIRED, with PUBLISHED/SCHEDULED → WITHDRAWN.
+- Admins can create, edit, publish, schedule, and withdraw announcements through authenticated-only SECURITY DEFINER RPCs.
+- Only Kuri MAIN_ADMIN/ADMIN authority can mutate announcements.
+- Draft and scheduled content is editable; each content edit creates an immutable version record.
+- Audience is explicitly represented as KURI_FULL_AUDIENCE: Kuri members plus the existing notification-policy administrative audiences.
+- Expiry is supported and enforced by the database state processor.
+- Scheduled publication and expiry are processed by a pg_cron-driven database job running every minute.
+- Direct client INSERT/UPDATE/DELETE on announcements is disabled.
+- Published announcement reads are restricted to actual Kuri members with linked Users or authorized Kuri/organization administrators; organization membership alone is insufficient.
+- Announcement creation, editing, publication, withdrawal and state changes are audited.
+- Publication produces KURI_ANNOUNCEMENT through the existing policy-driven notification architecture; actor inclusion follows the existing policy.
+- No separate notification recipient system was created.
+
+GitHub migrations:
+- supabase/migrations/20260927180000_kuri_announcement_workflow_v1.sql
+- supabase/migrations/20260927181000_kuri_announcement_rls_scope_hardening_v1.sql
+
+Verification completed:
+- migration history and schema verified
+- announcement state machine verified transactionally
+- edit/versioning verified
+- scheduled publication verified
+- withdrawal verified
+- expiry verified
+- authorization and anonymous execution restrictions verified
+- RLS scope hardened and verified
+- audit records verified
+- KURI_ANNOUNCEMENT event creation verified
+- policy-driven notification dispatch verified with a qualifying Kuri-admin recipient
+- all smoke-test rows rolled back; no test announcement/event/notification/audit rows remain
 
 ### 3. Admin Security Event Workflow — NEXT
 
