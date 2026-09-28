@@ -1,0 +1,141 @@
+# SAFETY BACKUP — pre-R6/R7 definitions
+
+## create_person_for_org_admin
+
+create or replace function public.create_person_for_org_admin(
+  target_org_id uuid,
+  registered_name text,
+  display_name text default null,
+  address text default null,
+  notes text default null,
+  phone text default null,
+  email text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare
+  person_id uuid;
+  clean_registered_name text := nullif(trim(registered_name), '');
+  clean_display_name text := nullif(trim(display_name), '');
+  clean_address text := nullif(trim(address), '');
+  clean_notes text := nullif(trim(notes), '');
+  clean_phone text := nullif(trim(phone), '');
+  clean_email text := nullif(trim(email), '');
+begin
+  if auth.uid() is null then
+    raise exception 'You must be signed in.';
+  end if;
+
+  if target_org_id is null then
+    raise exception 'Organization is required.';
+  end if;
+
+  if not exists (
+    select 1
+    from public.organization_users ou
+    where ou.organization_id = target_org_id
+      and ou.user_id = auth.uid()
+      and ou.role = any(array['MAIN_ADMIN','ADMIN']::public.app_role[])
+  ) then
+    raise exception 'You do not have permission to add people to this organization.';
+  end if;
+
+  if clean_registered_name is null then
+    raise exception 'Registered name is required.';
+  end if;
+
+  insert into public.people (
+    organization_id,
+    registered_name,
+    display_name,
+    address,
+    notes
+  )
+  values (
+    target_org_id,
+    clean_registered_name,
+    clean_display_name,
+    clean_address,
+    clean_notes
+  )
+  returning id into person_id;
+
+  if clean_phone is not null then
+    insert into public.person_phones (person_id, phone_number, is_primary)
+    values (person_id, clean_phone, true);
+  end if;
+
+  if clean_email is not null then
+    insert into public.person_emails (person_id, email, is_primary)
+    values (person_id, clean_email, true);
+  end if;
+
+  return person_id;
+end;
+$function$;
+
+
+
+## create_payment_for_admin
+
+create function public.create_payment_for_admin(
+  target_kuri_id uuid,
+  target_person_id uuid,
+  payment_amount bigint,
+  payment_date timestamptz,
+  payment_method public.payment_method,
+  payment_reference text default null,
+  payment_notes text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path=public
+as $$
+declare
+  payment_id uuid;
+  target_org_id uuid;
+begin
+  if auth.uid() is null then raise exception 'You must be signed in.'; end if;
+  if payment_amount<=0 then raise exception 'Payment amount must be greater than zero.'; end if;
+
+  select k.organization_id into target_org_id
+  from public.kuris k
+  where k.id=target_kuri_id;
+
+  if target_org_id is null then raise exception 'Kuri not found.'; end if;
+
+  if not public.has_kuri_admin_role(
+    target_kuri_id,
+    array['MAIN_ADMIN','ADMIN']::public.kuri_admin_role[]
+  ) then
+    raise exception 'You do not have permission to record payments for this Kuri.';
+  end if;
+
+  if not exists (
+    select 1
+    from public.memberships m
+    where m.kuri_id=target_kuri_id
+      and m.person_id=target_person_id
+  ) then
+    raise exception 'Person is not a member of this Kuri.';
+  end if;
+
+  insert into public.payments(
+    kuri_id,organization_id,person_id,amount,payment_date,method,
+    reference_number,status,notes
+  )
+  values(
+    target_kuri_id,target_org_id,target_person_id,payment_amount,payment_date,
+    payment_method,nullif(btrim(payment_reference),''),
+    'APPROVED',nullif(btrim(payment_notes),'')
+  )
+  returning id into payment_id;
+
+  return payment_id;
+end $$;
+
+
