@@ -257,11 +257,13 @@ The main-side 65-commit divergence was reviewed against `backend-ledger-update`.
 
 Safety backups were created before destructive/replacement work. In particular, the superseded duplicate trigger-security migration and the pre-R6/R7 Person/Payment definitions are preserved under `docs/backend/reconciliation-backups/`.
 
-**Important:** these GitHub migrations have **not** been applied to Supabase in this checkpoint. Live-schema/migration-history verification remains a separate step after the GitHub reconciliation is reviewed.
+**Live verification completed:** the grouped reconciliation migrations were compared against the live Supabase migration history and schema. The live database already contains the corresponding functionality through its earlier applied source migrations, including the winner/death cutoff, security/invitation hardening, person-creation rate limiting, Person Claim, notification domain/scheduled producers, Admin Position Request, Kuri Announcement, announcement RLS hardening, and Admin Security Event workflows. The grouped reconciliation migrations therefore were **not replayed** against production; doing so would duplicate already-applied objects and would unnecessarily rewrite the migration history. No production schema change was required in this reconciliation pass.
 
 ### Current reconciliation status
 
 - Main-only backend implementation queue: **reconciled/classified**.
-- GitHub integration branch: **contains the required reconciliation code**.
-- Supabase: **not changed by this reconciliation checkpoint**.
-- Remaining work is verification/hardening, migration-history reconciliation, tests, security/Auth review, load testing, API contract freeze, and final backend freeze.
+- GitHub integration branch: **contains the required reconciliation code and safety backups**.
+- Supabase schema/function/job verification: **completed**.
+- Supabase migration history: **functionally reconciled**; equivalent source migrations are already recorded under their original live versions rather than the branch's grouped reconciliation filenames.
+- Production schema was **not modified** by replaying duplicate grouped migrations.
+- Remaining work is verification/hardening, migration-history/fresh-environment reproducibility review, tests, security/Auth review, load testing, API contract freeze, and final backend freeze.
